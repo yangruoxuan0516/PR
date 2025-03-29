@@ -3,7 +3,6 @@
 #define PARAMS_H
 
 struct GUIParams {
-    int connect_method = 0;
 
     int snake_iteration_num = 100;
     float snake_step = 0.001f;
@@ -11,7 +10,7 @@ struct GUIParams {
     float weight_elastic = 1.0f;
     float weight_curvature = 1.0f;
     float weight_attraction = 10.0f;
-    
+
 };
 
 #endif // PARAMS_H

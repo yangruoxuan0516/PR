@@ -8,6 +8,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # set module path
 list(PREPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
+# set(LIBIGL_WITH_KNN ON)
+
+
 # Libigl
 include(libigl)
 
@@ -21,8 +24,9 @@ igl_include(glfw)
 # Other modules you could enable
 #igl_include(embree)
 igl_include(imgui)
+# igl_include(knn)
 #igl_include(opengl)
-#igl_include(stb)
+# igl_include(stb)
 #igl_include(predicates)
 #igl_include(xml)
 #igl_include(copyleft cgal)
@@ -59,6 +63,7 @@ add_executable(${PROJECT_NAME} ${SRC_FILES})
 target_link_libraries(${PROJECT_NAME} PUBLIC 
   igl::glfw
   igl::core
+  # igl::knn
   ## Other modules you could link to
   # igl::embree
   igl::imgui
@@ -75,5 +80,3 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   # igl_restricted::mosek
   # igl_restricted::triangle
   )
-
-
