@@ -78,7 +78,7 @@ bool click_point(igl::opengl::glfw::Viewer& viewer,
 
 
 
-std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> connect_point(GUIParams& params, const Eigen::MatrixXd& V, const Eigen::MatrixXd& C, const Eigen::RowVector3d& color) {
+std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> connect_point(GUIParams& params, const Eigen::MatrixXd& V, const Eigen::MatrixXd& C, const Eigen::RowVector3d& color, igl::opengl::glfw::Viewer& viewer) {
     std::vector<int> selected_points;
 
     for (int i = 0; i < V.rows(); i++) {
@@ -113,7 +113,7 @@ std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> connect_point(GUIParams& params, co
     for (int i = 0; i < E_raw.rows(); i++) {
         Eigen::MatrixXd V_;
         Eigen::MatrixXi E_;
-        std::tie(V_, E_) = snake(params, V, V_raw.row(E_raw(i, 0)), V_raw.row(E_raw(i, 1)));
+        std::tie(V_, E_) = snake(params, V, V_raw.row(E_raw(i, 0)), V_raw.row(E_raw(i, 1)), viewer);
         if (i == 0) {
             V_final = V_;
             E_final = E_;
@@ -141,6 +141,8 @@ std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> connect_point(GUIParams& params, co
 int main() {
     Eigen::MatrixXd V;
     std::string filename = "/Users/ruox/Documents/DoubleDegree/cours_2/ParcoursRecherche/projet/generate_example_point_cloud/point_cloud/X_form_C.xyz";
+    // std::string filename = "/Users/ruox/Documents/DoubleDegree/cours_2/ParcoursRecherche/projet/python/skeleton.xyz";
+
     if (!loadXYZ(filename, V)) return 1;
     Eigen::MatrixXd C = Eigen::MatrixXd::Constant(V.rows(), 3, 1.0);
     Eigen::MatrixXi E;
@@ -205,7 +207,7 @@ int main() {
             for (int i = 0; i < type_labels.size(); i++) {
                 Eigen::MatrixXd V_temp = V;
                 Eigen::MatrixXd C_temp = C;
-                auto [V_result, E_result] = connect_point(params, V_temp, C_temp, type_colors[i]);
+                auto [V_result, E_result] = connect_point(params, V_temp, C_temp, type_colors[i], viewer);
 
                 int old_V_rows = V_all.rows();
                 int old_E_rows = E_all.rows();
@@ -246,8 +248,11 @@ int main() {
     };
     
     viewer.data().set_points(V, C);
+    viewer.data().point_size = 10;
+    viewer.core().align_camera_center(V);
 
-    viewer.launch();
+    viewer.launch_init();
+    viewer.launch_rendering(true);
 
     return 0;
 }

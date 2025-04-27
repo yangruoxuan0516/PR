@@ -11,6 +11,6 @@
 #include <params.h>
 
 
-std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> snake(GUIParams& params, const Eigen::MatrixXd& points, const Eigen::RowVectorXd start_point, const Eigen::RowVectorXd end_point);
+std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> snake(GUIParams& params, const Eigen::MatrixXd& points, const Eigen::RowVectorXd start_point, const Eigen::RowVectorXd end_poin, igl::opengl::glfw::Viewer& viewer);
 
 #endif

@@ -82,14 +82,44 @@ double compute_energy(GUIParams& params, const Eigen::MatrixXd &curve, const Eig
 }
 
 
+
+
+
 // Function to optimize the snake curve
-void optimize_snake(GUIParams& params, Eigen::MatrixXd &resampled_points, const Eigen::MatrixXd &points) {
+void optimize_snake(GUIParams& params, Eigen::MatrixXd &resampled_points, const Eigen::MatrixXd &points, igl::opengl::glfw::Viewer& viewer) {
+    bool next_iteration = true;
     for (int iter = 0; iter < params.snake_iteration_num; ++iter) {
 
         Eigen::MatrixXd new_curve = resample_polyline(resampled_points, params.snake_resample_num);
 
         int k = 10;
         Eigen::MatrixXi knn_indices = knn_search_nanoflann(points, new_curve, k);
+
+
+        // --- 可视化 knn 邻居点 ---
+        std::cout << "== Start drawing neighbors ==" << std::endl;
+
+
+        if (next_iteration) {
+            next_iteration = false;
+            viewer.data().clear();
+            // show the knn neighbors, using viewer.data().add_points
+            for (int i = 0; i < knn_indices.rows(); ++i) {
+                for (int j = 0; j < knn_indices.cols(); ++j) {
+                    int idx = knn_indices(i, j);
+                    viewer.data().add_points(points.row(idx), Eigen::RowVector3d(1.0, 0.0, 0.0));
+                }
+            }
+        }
+
+        viewer.core().draw(viewer.data());
+
+        
+        std::cout << "Iteration " << iter << ": Press Enter to continue..." << std::endl;
+        std::cin.get();
+        next_iteration = true;
+        // --------------------------
+
 
         for (int i = 1; i < resampled_points.rows() - 1; ++i) { // Exclude endpoints
             Eigen::Vector3d gradient(0, 0, 0);
@@ -116,7 +146,7 @@ void optimize_snake(GUIParams& params, Eigen::MatrixXd &resampled_points, const 
 }
 
 
-std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> snake(GUIParams& params, const Eigen::MatrixXd& points, const Eigen::RowVectorXd start_point, const Eigen::RowVectorXd end_point) {
+std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> snake(GUIParams& params, const Eigen::MatrixXd& points, const Eigen::RowVectorXd start_point, const Eigen::RowVectorXd end_point, igl::opengl::glfw::Viewer& viewer) {
 
     // Resample points
     Eigen::MatrixXd initial_line = Eigen::MatrixXd::Zero(2, 3);
@@ -126,7 +156,7 @@ std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> snake(GUIParams& params, const Eige
     Eigen::MatrixXd resampled_points = resample_polyline(initial_line, params.snake_resample_num);
 
     // Optimize snake
-    optimize_snake(params, resampled_points, points);
+    optimize_snake(params, resampled_points, points, viewer);
 
     Eigen::MatrixXi E(resampled_points.rows() - 1, 2);
     for (int i = 0; i < resampled_points.rows() - 1; i++) {
