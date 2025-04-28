@@ -241,14 +241,15 @@ int main() {
                 for (int i = 0; i < all_colors.size(); ++i) {
                     C_all.row(i) = all_colors[i];
                 }
-
-
                 viewer.data_list[2].set_edges(V_all, E_all, C_all); 
             }
         }
 
         if (ImGui::Button("One Step Optimize", ImVec2(-1, 0))) {
             optimize_snake_step();
+        }
+        if (ImGui::Button("One Iteration Optimize", ImVec2(-1, 0))) {
+            optimize_snake_iteration();
         }
 
         ImGui::End(); 

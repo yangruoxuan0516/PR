@@ -9,7 +9,6 @@ static Eigen::MatrixXd resampled_points_backup;
 static Eigen::MatrixXd points_backup;
 static igl::opengl::glfw::Viewer* viewer_backup = nullptr;
 static GUIParams* params_backup = nullptr;
-static bool snake_running = false;
 static Eigen::RowVector3d color_backup;
 
 // Compute cumulative arc length
@@ -71,18 +70,15 @@ void optimize_snake(GUIParams& params, Eigen::MatrixXd& resampled_points, const 
     viewer_backup = &viewer;
     params_backup = &params;
     color_backup = color;
-    snake_running = true;
 }
 
 // Perform one optimization step per Enter key
 void optimize_snake_step() {
-    if (!snake_running) return;
-    
+    // print current iteration and index
+    std::cout << "Current iteration: " << current_iter << ", Current index: " << current_i << std::endl;
     if (current_iter >= params_backup->snake_iteration_num) {
-        snake_running = false;
         viewer_backup->data_list[1].clear();
         viewer_backup->data_list[1].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
-        snake_running = false;
         return;
     }
 
@@ -133,6 +129,26 @@ void optimize_snake_step() {
 
     current_i++;
 }
+
+
+void optimize_snake_iteration() {
+    if (current_iter >= params_backup->snake_iteration_num) {
+        viewer_backup->data_list[1].clear();
+        viewer_backup->data_list[1].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
+        return;
+    }
+
+    while (current_i < resampled_points_backup.rows() - 1) {
+        optimize_snake_step();
+    }
+    current_i = 1;
+    current_iter++;
+    resampled_points_backup = new_curve;
+    new_curve = resample_polyline(resampled_points_backup, params_backup->snake_resample_num);
+    viewer_backup->data_list[1].clear();
+    viewer_backup->data_list[1].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
+}
+
 
 // Snake interface
 std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> snake(GUIParams& params, const Eigen::MatrixXd& points, const Eigen::RowVectorXd start_point, const Eigen::RowVectorXd end_point, igl::opengl::glfw::Viewer& viewer, const Eigen::RowVector3d& color) {
