@@ -14,7 +14,6 @@
 #include "params.h"
 
 
-
 bool loadXYZ(const std::string& filename, Eigen::MatrixXd& V) {
     std::ifstream infile(filename);
     if (!infile) {
@@ -113,7 +112,7 @@ std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> connect_point(GUIParams& params, co
     for (int i = 0; i < E_raw.rows(); i++) {
         Eigen::MatrixXd V_;
         Eigen::MatrixXi E_;
-        std::tie(V_, E_) = snake(params, V, V_raw.row(E_raw(i, 0)), V_raw.row(E_raw(i, 1)), viewer);
+        std::tie(V_, E_) = snake(params, V, V_raw.row(E_raw(i, 0)), V_raw.row(E_raw(i, 1)), viewer, color);
         if (i == 0) {
             V_final = V_;
             E_final = E_;
@@ -135,19 +134,29 @@ std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> connect_point(GUIParams& params, co
 }
 
 
+#include <queue>
+#include <functional>
+extern std::queue<std::function<void(igl::opengl::glfw::Viewer&)>> drawing_queue;
 
-
+bool wait_for_enter = false;
 
 int main() {
     Eigen::MatrixXd V;
-    std::string filename = "/Users/ruox/Documents/DoubleDegree/cours_2/ParcoursRecherche/projet/generate_example_point_cloud/point_cloud/X_form_C.xyz";
-    // std::string filename = "/Users/ruox/Documents/DoubleDegree/cours_2/ParcoursRecherche/projet/python/skeleton.xyz";
+    // std::string filename = "/Users/ruox/Documents/DoubleDegree/cours_2/ParcoursRecherche/projet/generate_example_point_cloud/point_cloud/X_form_C.xyz";
+    std::string filename = "/Users/ruox/Documents/DoubleDegree/cours_2/ParcoursRecherche/projet/python/skeleton.xyz";
 
     if (!loadXYZ(filename, V)) return 1;
     Eigen::MatrixXd C = Eigen::MatrixXd::Constant(V.rows(), 3, 1.0);
     Eigen::MatrixXi E;
 
     igl::opengl::glfw::Viewer viewer;
+    viewer.append_mesh(); // data_id = 0 for static original points
+    viewer.append_mesh(); // data_id = 1 for dynamic KNN points
+    viewer.append_mesh(); // data_id = 2 for dynamic curve points
+    igl::opengl::glfw::Viewer* viewer_ptr = &viewer;
+    viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer& viewer) -> bool {
+        return false;
+    };
 
     //menu
     igl::opengl::glfw::imgui::ImGuiPlugin plugin;
@@ -235,7 +244,8 @@ int main() {
                     C_all.row(i) = all_colors[i];
                 }
 
-                viewer.data().set_edges(V_all, E_all, C_all); 
+
+                viewer.data_list[2].set_edges(V_all, E_all, C_all); 
             }
         }
 
@@ -251,8 +261,34 @@ int main() {
     viewer.data().point_size = 10;
     viewer.core().align_camera_center(V);
 
-    viewer.launch_init();
-    viewer.launch_rendering(true);
+
+    viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer& viewer) -> bool {
+        if (!drawing_queue.empty() && !wait_for_enter) {
+            // 取出一个，执行
+            auto draw_task = drawing_queue.front();
+            drawing_queue.pop();
+            draw_task(viewer);
+            wait_for_enter = true; // 等用户按Enter
+        }
+        else if (!wait_for_enter) {
+            // 如果在等待用户按Enter，什么都不做
+            viewer.data_list[1].clear();
+        }
+        return false;
+    };
+
+
+    std::thread input_thread([&](){
+        while (true) {
+            std::cin.get();
+            optimize_snake_step();
+            wait_for_enter = false;
+            glfwPostEmptyEvent();
+        }
+    });
+    input_thread.detach(); // 分离线程
+
+    viewer.launch();
 
     return 0;
 }
