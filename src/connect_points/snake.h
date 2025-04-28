@@ -14,4 +14,5 @@
 std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> snake(GUIParams& params, const Eigen::MatrixXd& points, const Eigen::RowVectorXd start_point, const Eigen::RowVectorXd end_poin, igl::opengl::glfw::Viewer& viewer, const Eigen::RowVector3d& color);
 void optimize_snake_step();
 void optimize_snake_iteration();
+void optimize_snake_complete();
 #endif

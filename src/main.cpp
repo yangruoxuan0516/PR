@@ -330,6 +330,10 @@ int main() {
         if (ImGui::Button("One Iteration Optimize", ImVec2(-1, 0))) {
             optimize_snake_iteration();
         }
+        if (ImGui::Button("Complete Optimize", ImVec2(-1, 0))) {
+            optimize_snake_complete();
+        }
+
 
         ImGui::Separator();
         ImGui::Text("Delaunay Triangulatio:");

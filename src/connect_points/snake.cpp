@@ -150,6 +150,27 @@ void optimize_snake_iteration() {
 }
 
 
+void optimize_snake_complete() {
+    if (current_iter >= params_backup->snake_iteration_num) {
+        viewer_backup->data_list[1].clear();
+        viewer_backup->data_list[1].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
+        return;
+    }
+
+    while (current_iter < params_backup->snake_iteration_num) {
+        while (current_i < resampled_points_backup.rows() - 1) {
+            optimize_snake_step();
+        }
+        current_i = 1;
+        current_iter++;
+        resampled_points_backup = new_curve;
+        new_curve = resample_polyline(resampled_points_backup, params_backup->snake_resample_num);
+    }
+    viewer_backup->data_list[1].clear();
+    viewer_backup->data_list[1].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
+}
+
+
 // Snake interface
 std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> snake(GUIParams& params, const Eigen::MatrixXd& points, const Eigen::RowVectorXd start_point, const Eigen::RowVectorXd end_point, igl::opengl::glfw::Viewer& viewer, const Eigen::RowVector3d& color) {
     Eigen::MatrixXd initial_line(2, 3);
