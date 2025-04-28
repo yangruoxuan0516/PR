@@ -11,6 +11,7 @@
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Delaunay_triangulation_3.h>
 #include <Eigen/Core>
+#include <numeric>
 
 #include "connect_points/nearest_neighbor.h"
 #include "connect_points/travel_salesman.h"
@@ -208,6 +209,23 @@ int main() {
     Eigen::MatrixXd C = Eigen::MatrixXd::Constant(V.rows(), 3, 1.0);
     Eigen::MatrixXi E;
 
+// -- delaunay triangulation
+    // raw
+    Delaunay dt;
+    insert_points_into_delaunay(V, dt);
+    Eigen::MatrixXd V_dt;
+    Eigen::MatrixXi E_dt;
+    extract_edges_from_delaunay(dt, V_dt, E_dt);
+    // edge length
+    std::vector<double> dt_edge_lengths;
+    for (int i = 0; i < E_dt.rows(); ++i)
+    {
+        int idx1 = E_dt(i,0);
+        int idx2 = E_dt(i,1);
+        double length = (V_dt.row(idx1) - V_dt.row(idx2)).norm();
+        dt_edge_lengths.push_back(length);
+    }
+
 // --- viewer
     igl::opengl::glfw::Viewer viewer;
     viewer.append_mesh(); // data_id = 0 for static original points
@@ -233,7 +251,7 @@ int main() {
 
     menu.callback_draw_viewer_menu = [&]()
     {
-        ImGui::SetNextWindowSize(ImVec2(350, 350), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(350, 450), ImGuiCond_FirstUseEver); // width, height
         ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
         ImGui::Begin("Menu", nullptr, ImGuiWindowFlags_NoCollapse);
 
@@ -318,24 +336,39 @@ int main() {
 
         if (ImGui::Button("Delaunay Triangulation", ImVec2(-1, 0))) {
             show_delaunay = !show_delaunay;
-        
             if (show_delaunay) {
-                Delaunay dt;
-                insert_points_into_delaunay(V, dt);
-        
-                Eigen::MatrixXd V_dt;
-                Eigen::MatrixXi E_dt;
-                extract_edges_from_delaunay(dt, V_dt, E_dt);
-        
                 viewer.data_list[3].set_edges(V_dt, E_dt, Eigen::RowVector3d(0.0, 0.0, 0.0));
                 viewer.data_list[3].line_width = 1.0;
             }
             else {
                 viewer.data_list[3].clear(); // clear edges to hide
-                viewer.data_list[3].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
+                // viewer.data_list[3].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
             }
         }
+
+        // get max in dt_edge_lengths
+        float max_edge_length = *std::max_element(dt_edge_lengths.begin(), dt_edge_lengths.end());
+        float filter_edge_length = max_edge_length;
+        bool updated = ImGui::SliderFloat("max edge length", &filter_edge_length, 0.0f, max_edge_length);
         
+        if (updated) {
+            std::vector<Eigen::Vector2i> filtered_edges;
+            for (int i = 0; i < E_dt.rows(); ++i)
+            {
+                double length = dt_edge_lengths[i];
+                if (length <= filter_edge_length) 
+                {
+                    filtered_edges.push_back(E_dt.row(i));
+                }
+            }
+            Eigen::MatrixXi E_filtered(filtered_edges.size(), 2);
+            for (int i = 0; i < filtered_edges.size(); ++i)
+            {
+                E_filtered.row(i) = filtered_edges[i];
+            }
+            viewer.data_list[3].clear();
+            viewer.data_list[3].set_edges(V_dt, E_filtered, Eigen::RowVector3d(0.0, 0.0, 0.0));
+        }
 
         ImGui::End(); 
     };

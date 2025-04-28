@@ -4,7 +4,7 @@
 
 struct GUIParams {
 
-    int snake_iteration_num = 2;
+    int snake_iteration_num = 5;
     float snake_step = 0.001f;
     int snake_resample_num = 10;
     float weight_elastic = 1.0f;
