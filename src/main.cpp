@@ -8,11 +8,28 @@
 #include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
 #include <Eigen/Dense>
 #include <vector>
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Delaunay_triangulation_3.h>
+#include <Eigen/Core>
 
 #include "connect_points/nearest_neighbor.h"
 #include "connect_points/travel_salesman.h"
 #include "connect_points/snake.h"
 #include "params.h"
+
+
+std::vector<std::string> type_labels = {"Type 1"};
+std::vector<Eigen::RowVector3d> type_colors = {
+    Eigen::RowVector3d::Random().cwiseAbs()  // Type 1 color
+};
+int current_type_index = 0;  // Initially selected type
+
+
+
+typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
+typedef CGAL::Delaunay_triangulation_3<K> Delaunay;
+typedef K::Point_3 Point;
+bool show_delaunay = false;
 
 
 bool loadXYZ(const std::string& filename, Eigen::MatrixXd& V) {
@@ -132,11 +149,53 @@ std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> connect_point(GUIParams& params, co
 
 }
 
-std::vector<std::string> type_labels = {"Type 1"};
-std::vector<Eigen::RowVector3d> type_colors = {
-    Eigen::RowVector3d::Random().cwiseAbs()  // Type 1 color
-};
-int current_type_index = 0;  // Initially selected type
+
+void insert_points_into_delaunay(const Eigen::MatrixXd& V, Delaunay& dt)
+{
+    std::vector<Point> points;
+    for (int i = 0; i < V.rows(); ++i)
+    {
+        points.emplace_back(V(i,0), V(i,1), V(i,2)); // x,y,z
+    }
+    dt.insert(points.begin(), points.end());
+}
+
+void extract_edges_from_delaunay(const Delaunay& dt, Eigen::MatrixXd& V_edges, Eigen::MatrixXi& E_edges)
+{
+    std::vector<Eigen::RowVector3d> points;
+    std::vector<Eigen::Vector2i> edges;
+
+    for(auto e = dt.finite_edges_begin(); e != dt.finite_edges_end(); ++e)
+    {
+        auto segment = dt.segment(*e);
+        Point p1 = segment.point(0);
+        Point p2 = segment.point(1);
+
+        // 保存端点坐标
+        points.push_back(Eigen::RowVector3d(p1.x(), p1.y(), p1.z()));
+        points.push_back(Eigen::RowVector3d(p2.x(), p2.y(), p2.z()));
+
+        int idx1 = points.size() - 2;
+        int idx2 = points.size() - 1;
+
+        // 保存边 (每条边用2个点）
+        edges.push_back(Eigen::Vector2i(idx1, idx2));
+    }
+
+    // 转成Eigen矩阵
+    V_edges.resize(points.size(), 3);
+    for (int i = 0; i < points.size(); ++i)
+    {
+        V_edges.row(i) = points[i];
+    }
+
+    E_edges.resize(edges.size(), 2);
+    for (int i = 0; i < edges.size(); ++i)
+    {
+        E_edges.row(i) = edges[i];
+    }
+}
+
 
 int main() {
 
@@ -154,6 +213,7 @@ int main() {
     viewer.append_mesh(); // data_id = 0 for static original points
     viewer.append_mesh(); // data_id = 1 for dynamic KNN points
     viewer.append_mesh(); // data_id = 2 for dynamic curve points
+    viewer.append_mesh(); // data_id = 3 for delaunay edges
 
     viewer.data().point_size = 10;
     viewer.data().set_points(V, C);
@@ -204,6 +264,7 @@ int main() {
         }
 
         ImGui::Separator();
+        ImGui::Text("Snake Connection:");
 
         if (ImGui::Button("connect", ImVec2(-1, 0))) { 
             std::vector<Eigen::RowVector3d> all_colors;
@@ -251,6 +312,30 @@ int main() {
         if (ImGui::Button("One Iteration Optimize", ImVec2(-1, 0))) {
             optimize_snake_iteration();
         }
+
+        ImGui::Separator();
+        ImGui::Text("Delaunay Triangulatio:");
+
+        if (ImGui::Button("Delaunay Triangulation", ImVec2(-1, 0))) {
+            show_delaunay = !show_delaunay;
+        
+            if (show_delaunay) {
+                Delaunay dt;
+                insert_points_into_delaunay(V, dt);
+        
+                Eigen::MatrixXd V_dt;
+                Eigen::MatrixXi E_dt;
+                extract_edges_from_delaunay(dt, V_dt, E_dt);
+        
+                viewer.data_list[3].set_edges(V_dt, E_dt, Eigen::RowVector3d(0.0, 0.0, 0.0));
+                viewer.data_list[3].line_width = 1.0;
+            }
+            else {
+                viewer.data_list[3].clear(); // clear edges to hide
+                viewer.data_list[3].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
+            }
+        }
+        
 
         ImGui::End(); 
     };

@@ -5,11 +5,15 @@ project(example)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
 # set module path
 list(PREPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
-# set(LIBIGL_WITH_KNN ON)
-
+set(CMAKE_PREFIX_PATH "/opt/homebrew")
+find_package(CGAL REQUIRED COMPONENTS Core)
 
 # Libigl
 include(libigl)
@@ -47,7 +51,7 @@ igl_include(imgui)
 #     main.cpp
 #     connect_points/nearest_neighbor.cpp
 # )
-include_directories(src)
+
 # Collect source files
 set(SRC_FILES 
     src/main.cpp
@@ -58,6 +62,8 @@ set(SRC_FILES
 
 # Add the executable
 add_executable(${PROJECT_NAME} ${SRC_FILES})
+
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
 # Link igl (and the glfw module) to your project
 target_link_libraries(${PROJECT_NAME} PUBLIC 
@@ -79,4 +85,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   # igl_restricted::matlab
   # igl_restricted::mosek
   # igl_restricted::triangle
+  CGAL::CGAL
   )
+
+
