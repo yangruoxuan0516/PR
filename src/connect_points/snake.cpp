@@ -1,11 +1,6 @@
 #include <iostream>
 #include "connect_points/snake.h"
 #include "params.h"
-#include <queue>
-#include <functional>
-
-// Global variables for step-by-step snake
-std::queue<std::function<void(igl::opengl::glfw::Viewer&)>> drawing_queue;
 
 static int current_iter = 0;
 static int current_i = 1;
@@ -44,11 +39,6 @@ Eigen::MatrixXd resample_polyline(const Eigen::MatrixXd& V, int num_samples) {
 double compute_energy(GUIParams& params, const Eigen::MatrixXd& curve, const Eigen::MatrixXd& points, int i, const Eigen::MatrixXi& knn_indices) {
     double elastic_energy = 0.0, curvature_energy = 0.0, attraction_energy = 0.0;
 
-    // print curve row number 
-    std::cout << "curve row number: " << curve.rows() << std::endl;
-    // print i
-    std::cout << "i: " << i << std::endl;
-
     if (i > 0) elastic_energy += (curve.row(i) - curve.row(i - 1)).squaredNorm();
     if (i < curve.rows() - 1) elastic_energy += (curve.row(i) - curve.row(i + 1)).squaredNorm();
 
@@ -65,11 +55,6 @@ double compute_energy(GUIParams& params, const Eigen::MatrixXd& curve, const Eig
         if (dist < min_dist) min_dist = dist;
     }
     attraction_energy += min_dist;
-
-    // print energies
-    std::cout << "Elastic energy: " << elastic_energy << std::endl;
-    std::cout << "Curvature energy: " << curvature_energy << std::endl;
-    std::cout << "Attraction energy: " << attraction_energy << std::endl;
 
     return params.weight_elastic * elastic_energy +
            params.weight_curvature * curvature_energy +
@@ -89,18 +74,15 @@ void optimize_snake(GUIParams& params, Eigen::MatrixXd& resampled_points, const 
     snake_running = true;
 }
 
-extern bool wait_for_enter;
-
 // Perform one optimization step per Enter key
 void optimize_snake_step() {
     if (!snake_running) return;
+    
     if (current_iter >= params_backup->snake_iteration_num) {
         snake_running = false;
-        drawing_queue.push([=](igl::opengl::glfw::Viewer& viewer){
-            viewer.data_list[1].clear();
-            viewer.data_list[1].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
-        });
-        wait_for_enter = false;
+        viewer_backup->data_list[1].clear();
+        viewer_backup->data_list[1].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
+        snake_running = false;
         return;
     }
 
@@ -110,7 +92,6 @@ void optimize_snake_step() {
         current_i = 1;
         current_iter++;
         if (current_iter >= params_backup->snake_iteration_num) {
-            snake_running = false;
             return;
         }
     }
@@ -118,24 +99,22 @@ void optimize_snake_step() {
     int k = 10;
     Eigen::MatrixXi knn_indices = knn_search_nanoflann(points_backup, new_curve.row(current_i), k);
 
-    drawing_queue.push([=](igl::opengl::glfw::Viewer& viewer){
-        viewer.data_list[1].clear();
-        viewer.data_list[2].clear();
-        viewer.data_list[1].point_size = 11;
+    viewer_backup->data_list[1].clear();
+    viewer_backup->data_list[2].clear();
+    viewer_backup->data_list[1].point_size = 11;
 
-        for (int j = 0; j < knn_indices.cols(); ++j) {
-            int idx = knn_indices(0, j);
-            viewer.data_list[1].add_points(points_backup.row(idx), Eigen::RowVector3d(1.0, 0.0, 0.0));
-        }
+    for (int j = 0; j < knn_indices.cols(); ++j) {
+        int idx = knn_indices(0, j);
+        viewer_backup->data_list[1].add_points(points_backup.row(idx), Eigen::RowVector3d(1.0, 0.0, 0.0));
+    }
 
-        viewer.data_list[2].add_edges(
-            new_curve.topRows(new_curve.rows()-1),
-            new_curve.bottomRows(new_curve.rows()-1),
-            color_backup);
+    viewer_backup->data_list[2].add_edges(
+        new_curve.topRows(new_curve.rows()-1),
+        new_curve.bottomRows(new_curve.rows()-1),
+        color_backup);
 
-        viewer.data_list[1].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
-        viewer.data_list[2].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
-    });
+        viewer_backup->data_list[1].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
+        viewer_backup->data_list[2].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
 
     // Gradient descent step
     Eigen::Vector3d gradient(0, 0, 0);
@@ -151,9 +130,6 @@ void optimize_snake_step() {
     }
 
     new_curve.row(current_i) -= params_backup->snake_step * gradient.transpose();
-
-    std::cout << "gradient: " << gradient.transpose() << std::endl;
-    std::cout << "new_curve: " << new_curve << std::endl;
 
     current_i++;
 }

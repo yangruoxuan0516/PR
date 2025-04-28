@@ -8,6 +8,7 @@
 #include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
 #include <Eigen/Dense>
 #include <vector>
+
 #include "connect_points/nearest_neighbor.h"
 #include "connect_points/travel_salesman.h"
 #include "connect_points/snake.h"
@@ -91,8 +92,6 @@ std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> connect_point(GUIParams& params, co
         return std::make_tuple(Eigen::MatrixXd(), Eigen::MatrixXi());
     }
 
-
-
     Eigen::MatrixXd points(selected_points.size(), 3);
 
     for (int i = 0; i < selected_points.size(); i++) {
@@ -133,14 +132,15 @@ std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> connect_point(GUIParams& params, co
 
 }
 
-
-#include <queue>
-#include <functional>
-extern std::queue<std::function<void(igl::opengl::glfw::Viewer&)>> drawing_queue;
-
-bool wait_for_enter = false;
+std::vector<std::string> type_labels = {"Type 1"};
+std::vector<Eigen::RowVector3d> type_colors = {
+    Eigen::RowVector3d::Random().cwiseAbs()  // Type 1 color
+};
+int current_type_index = 0;  // Initially selected type
 
 int main() {
+
+// --- load the point cloud
     Eigen::MatrixXd V;
     // std::string filename = "/Users/ruox/Documents/DoubleDegree/cours_2/ParcoursRecherche/projet/generate_example_point_cloud/point_cloud/X_form_C.xyz";
     std::string filename = "/Users/ruox/Documents/DoubleDegree/cours_2/ParcoursRecherche/projet/python/skeleton.xyz";
@@ -149,28 +149,27 @@ int main() {
     Eigen::MatrixXd C = Eigen::MatrixXd::Constant(V.rows(), 3, 1.0);
     Eigen::MatrixXi E;
 
+// --- viewer
     igl::opengl::glfw::Viewer viewer;
     viewer.append_mesh(); // data_id = 0 for static original points
     viewer.append_mesh(); // data_id = 1 for dynamic KNN points
     viewer.append_mesh(); // data_id = 2 for dynamic curve points
-    igl::opengl::glfw::Viewer* viewer_ptr = &viewer;
-    viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer& viewer) -> bool {
-        return false;
+
+    viewer.data().point_size = 10;
+    viewer.data().set_points(V, C);
+    viewer.core().align_camera_center(V);
+
+    viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer& viewer, int button, int modifier) {
+        return click_point(viewer, V, C, button, modifier, type_colors[current_type_index]);
     };
 
-    //menu
+// --- menu
     igl::opengl::glfw::imgui::ImGuiPlugin plugin;
     viewer.plugins.push_back(&plugin);
     igl::opengl::glfw::imgui::ImGuiMenu menu;
     plugin.widgets.push_back(&menu);
 
     GUIParams params; 
-
-    std::vector<std::string> type_labels = {"Type 1"};
-    std::vector<Eigen::RowVector3d> type_colors = {
-        Eigen::RowVector3d::Random().cwiseAbs()  // Type 1 color
-    };
-    int current_type_index = 0;  // Initially selected type
 
     menu.callback_draw_viewer_menu = [&]()
     {
@@ -206,8 +205,7 @@ int main() {
 
         ImGui::Separator();
 
-        if (ImGui::Button("connect", ImVec2(-1, 0)))
-        {
+        if (ImGui::Button("connect", ImVec2(-1, 0))) { 
             std::vector<Eigen::RowVector3d> all_colors;
             Eigen::MatrixXi E_all(0, 2);
             Eigen::MatrixXd V_all(0, 3);
@@ -249,44 +247,12 @@ int main() {
             }
         }
 
+        if (ImGui::Button("One Step Optimize", ImVec2(-1, 0))) {
+            optimize_snake_step();
+        }
 
         ImGui::End(); 
     };
-
-    viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer& viewer, int button, int modifier) {
-        return click_point(viewer, V, C, button, modifier, type_colors[current_type_index]);
-    };
-    
-    viewer.data().set_points(V, C);
-    viewer.data().point_size = 10;
-    viewer.core().align_camera_center(V);
-
-
-    viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer& viewer) -> bool {
-        if (!drawing_queue.empty() && !wait_for_enter) {
-            // 取出一个，执行
-            auto draw_task = drawing_queue.front();
-            drawing_queue.pop();
-            draw_task(viewer);
-            wait_for_enter = true; // 等用户按Enter
-        }
-        else if (!wait_for_enter) {
-            // 如果在等待用户按Enter，什么都不做
-            viewer.data_list[1].clear();
-        }
-        return false;
-    };
-
-
-    std::thread input_thread([&](){
-        while (true) {
-            std::cin.get();
-            optimize_snake_step();
-            wait_for_enter = false;
-            glfwPostEmptyEvent();
-        }
-    });
-    input_thread.detach(); // 分离线程
 
     viewer.launch();
 
