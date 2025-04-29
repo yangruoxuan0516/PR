@@ -87,7 +87,7 @@ bool click_point(igl::opengl::glfw::Viewer& viewer,
         else {
             C.row(vid) = Eigen::RowVector3d(1.0, 1.0, 1.0);
         }
-        viewer.data().set_points(V, C);
+        viewer.data_list[0].set_points(V, C);
         return true;
     }
 
@@ -225,6 +225,8 @@ int main() {
         double length = (V_dt.row(idx1) - V_dt.row(idx2)).norm();
         dt_edge_lengths.push_back(length);
     }
+    float max_edge_length = *std::max_element(dt_edge_lengths.begin(), dt_edge_lengths.end());
+    float filter_edge_length = max_edge_length;
 
 // --- viewer
     igl::opengl::glfw::Viewer viewer;
@@ -233,8 +235,8 @@ int main() {
     viewer.append_mesh(); // data_id = 2 for dynamic curve points
     viewer.append_mesh(); // data_id = 3 for delaunay edges
 
-    viewer.data().point_size = 10;
-    viewer.data().set_points(V, C);
+    viewer.data_list[0].point_size = 5;
+    viewer.data_list[0].set_points(V, C);
     viewer.core().align_camera_center(V);
 
     viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer& viewer, int button, int modifier) {
@@ -251,9 +253,14 @@ int main() {
 
     menu.callback_draw_viewer_menu = [&]()
     {
-        ImGui::SetNextWindowSize(ImVec2(350, 450), ImGuiCond_FirstUseEver); // width, height
+        ImGui::SetNextWindowSize(ImVec2(350, 500), ImGuiCond_FirstUseEver); // width, height
         ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
         ImGui::Begin("Menu", nullptr, ImGuiWindowFlags_NoCollapse);
+
+        ImGui::Text("Demostration Settings:");
+        ImGui::SliderFloat("Point radius", &viewer.data_list[0].point_size, 0.0f, 10.0f);
+
+        ImGui::Separator();
 
         ImGui::Text("Snake Params:");
         ImGui::SliderInt("snake iteration num", &params.snake_iteration_num, 0, 100);
@@ -336,7 +343,7 @@ int main() {
 
 
         ImGui::Separator();
-        ImGui::Text("Delaunay Triangulatio:");
+        ImGui::Text("Delaunay Triangulation:");
 
         if (ImGui::Button("Delaunay Triangulation", ImVec2(-1, 0))) {
             show_delaunay = !show_delaunay;
@@ -351,8 +358,6 @@ int main() {
         }
 
         // get max in dt_edge_lengths
-        float max_edge_length = *std::max_element(dt_edge_lengths.begin(), dt_edge_lengths.end());
-        float filter_edge_length = max_edge_length;
         bool updated = ImGui::SliderFloat("max edge length", &filter_edge_length, 0.0f, max_edge_length);
         
         if (updated) {
