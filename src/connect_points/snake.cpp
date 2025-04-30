@@ -74,8 +74,6 @@ void optimize_snake(GUIParams& params, Eigen::MatrixXd& resampled_points, const 
 
 // Perform one optimization step per Enter key
 void optimize_snake_step() {
-    // print current iteration and index
-    std::cout << "Current iteration: " << current_iter << ", Current index: " << current_i << std::endl;
     if (current_iter >= params_backup->snake_iteration_num) {
         viewer_backup->data_list[1].clear();
         viewer_backup->data_list[1].dirty |= igl::opengl::MeshGL::DIRTY_ALL;

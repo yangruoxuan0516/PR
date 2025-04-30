@@ -58,6 +58,7 @@ set(SRC_FILES
     src/connect_points/nearest_neighbor.cpp
     src/connect_points/travel_salesman.cpp
     src/connect_points/snake.cpp
+    src/connect_points/delaunay.cpp
 )
 
 # Add the executable
