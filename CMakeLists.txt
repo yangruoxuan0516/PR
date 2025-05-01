@@ -55,10 +55,11 @@ igl_include(imgui)
 # Collect source files
 set(SRC_FILES 
     src/main.cpp
-    src/connect_points/nearest_neighbor.cpp
     src/connect_points/travel_salesman.cpp
     src/connect_points/snake.cpp
     src/connect_points/delaunay.cpp
+    src/connect_points/dijkstra.cpp
+    src/connect_points/mst.cpp
 )
 
 # Add the executable

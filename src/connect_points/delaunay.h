@@ -11,7 +11,6 @@ typedef CGAL::Delaunay_triangulation_3<K> Delaunay;
 typedef K::Point_3 Point;
 
 void insert_points_into_delaunay(const Eigen::MatrixXd& V, Delaunay& dt);
-void extract_edges_from_delaunay(const Delaunay& dt, Eigen::MatrixXd& V_edges, Eigen::MatrixXi& E_edges);
-
+void extract_edges_from_delaunay(const Delaunay& dt, const Eigen::MatrixXd& V, Eigen::MatrixXi& E_dt);
 
 #endif // DELAUNAY_H
