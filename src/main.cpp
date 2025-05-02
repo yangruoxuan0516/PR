@@ -17,6 +17,9 @@
 #include "connect_points/delaunay.h"
 #include "connect_points/dijkstra.h"
 #include "connect_points/mst.h"
+
+#include "tree_hierarchy/find_hierarchy_with_root.h"
+
 #include "params.h"
 
 Eigen::RowVector3d default_color(0.5, 0.5, 0.5); 
@@ -210,6 +213,11 @@ int main() {
 // --- mst
     Eigen::MatrixXi E_mst = extract_mst_from_delaunay(V, E_dt);
 
+// --- find root
+    int root = find_root(V, E_mst);
+    // print the root point
+    std::cout << "Root point: " << root << std::endl;
+
 // --- viewer
     igl::opengl::glfw::Viewer viewer;
     viewer.core().background_color = Eigen::Vector4f(1.0, 1.0, 1.0, 1.0);  // R, G, B, A
@@ -221,21 +229,19 @@ int main() {
     viewer.append_mesh(); // data_id = 4 for delaunay edges between selected points
     viewer.append_mesh(); // data_id = 5 for mst
     viewer.append_mesh(); // data_id = 6 for mst edges between selected points
+    viewer.append_mesh(); // data_id = 7 for root point
     
-    viewer.data_list[0].point_size = 5;
+    viewer.data_list[0].point_size = 5; 
     viewer.data_list[0].set_points(V, C);
 
     viewer.core().align_camera_center(V);
-
-    std::cout << "eye: " << viewer.core().camera_eye.transpose() << std::endl;
-std::cout << "center: " << viewer.core().camera_center.transpose() << std::endl;
-std::cout << "up: " << viewer.core().camera_up.transpose() << std::endl;
     viewer.core().camera_eye = Eigen::Vector3f(0, 5, 0); // Set camera position
     viewer.core().camera_up = Eigen::Vector3f(0, 0, 1); 
 
     viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer& viewer, int button, int modifier) {
         return click_point(viewer, V, C, button, modifier, type_colors[current_type_index]);
     };
+
 
 // --- menu
     igl::opengl::glfw::imgui::ImGuiPlugin plugin;
@@ -249,6 +255,7 @@ std::cout << "up: " << viewer.core().camera_up.transpose() << std::endl;
     bool show_delaunay_selected = false;
     bool show_mst = false;
     bool show_mst_selected = false;
+    bool show_root = false;
 
     menu.callback_draw_viewer_menu = [&]()
     {
@@ -524,6 +531,19 @@ std::cout << "up: " << viewer.core().camera_up.transpose() << std::endl;
                 viewer.data_list[6].clear(); // clear edges to hide
             }
         }
+
+        ImGui::Separator();
+        ImGui::Text("Tree Hierarchy:");
+        if (ImGui::Button("Find Root", ImVec2(-1, 0))) {
+            if (show_root) {
+                show_root = false;
+                viewer.data_list[7].clear(); // clear edges to hide
+            } else {
+                show_root = true;
+                viewer.data_list[7].set_points(V.row(root), Eigen::RowVector3d(1, 0, 0)); 
+            }   
+        }
+
 
         ImGui::End(); 
     };

@@ -60,6 +60,8 @@ set(SRC_FILES
     src/connect_points/delaunay.cpp
     src/connect_points/dijkstra.cpp
     src/connect_points/mst.cpp
+
+    src/tree_hierarchy/find_hierarchy_with_root.cpp
 )
 
 # Add the executable
