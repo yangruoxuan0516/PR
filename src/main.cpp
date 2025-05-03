@@ -99,6 +99,26 @@ bool click_point(igl::opengl::glfw::Viewer& viewer,
     if (vid != -1) {
         if (C.row(vid) == default_color) {
             C.row(vid) = selected_color;
+
+            // Delaunay dt;
+            // insert_points_into_delaunay(V, dt);
+            // Eigen::MatrixXi E_dt;
+            // extract_edges_from_delaunay(dt, V, E_dt);
+            // Eigen::MatrixXi E_mst = extract_mst_from_delaunay(V, E_dt);
+            // // color also the ancestors
+            // int root = find_root(V, E_mst);
+            // std::vector<std::vector<int>> ancestor_list = find_ancestor_list(V, E_mst, root);
+            // std::vector<int> ancestors = ancestor_list[vid];
+            // // print the ancestors
+            // std::cout << "Anscestors of point " << vid << ": ";
+            // for (int i = 0; i < ancestors.size(); i++) {
+            //     std::cout << ancestors[i] << " ";
+            // }
+            // std::cout << std::endl;
+            // for (int i = 0; i < ancestors.size(); i++) {
+            //     C.row(ancestors[i]) = selected_color;
+            // }
+
         } 
         else {
             C.row(vid) = default_color;
@@ -218,6 +238,17 @@ int main() {
     // print the root point
     std::cout << "Root point: " << root << std::endl;
 
+// --- hierarchy
+    std::vector<std::vector<int>> ancestor_list = find_ancestor_list(V, E_mst, root);
+    // color each point with its level, that is the number of ancestors
+    // save to a new C_hierarchy
+    Eigen::MatrixXd C_hierarchy(V.rows(), 3);
+    for (int i = 0; i < V.rows(); ++i) {
+        int level = ancestor_list[i].size();
+        C_hierarchy.row(i) = generate_distinct_color(level);
+    }
+    // I will add a button to show the hierarchy color
+
 // --- viewer
     igl::opengl::glfw::Viewer viewer;
     viewer.core().background_color = Eigen::Vector4f(1.0, 1.0, 1.0, 1.0);  // R, G, B, A
@@ -230,6 +261,7 @@ int main() {
     viewer.append_mesh(); // data_id = 5 for mst
     viewer.append_mesh(); // data_id = 6 for mst edges between selected points
     viewer.append_mesh(); // data_id = 7 for root point
+    viewer.append_mesh(); // data_id = 8 for hierarchy color
     
     viewer.data_list[0].point_size = 5; 
     viewer.data_list[0].set_points(V, C);
@@ -256,6 +288,7 @@ int main() {
     bool show_mst = false;
     bool show_mst_selected = false;
     bool show_root = false;
+    bool show_hierarchy = false;
 
     menu.callback_draw_viewer_menu = [&]()
     {
@@ -264,7 +297,7 @@ int main() {
         ImGui::Begin("Menu", nullptr, ImGuiWindowFlags_NoCollapse);
 
         ImGui::Text("Demostration Settings:");
-        ImGui::SliderFloat("Point radius", &viewer.data_list[0].point_size, 0.0f, 10.0f);
+        ImGui::SliderFloat("Point radius", &viewer.data_list[0].point_size, 0.001f, 10.0f);
 
         ImGui::Separator();
 
@@ -542,6 +575,15 @@ int main() {
                 show_root = true;
                 viewer.data_list[7].set_points(V.row(root), Eigen::RowVector3d(1, 0, 0)); 
             }   
+        }
+        if (ImGui::Button("Show Hierarchy Color", ImVec2(-1, 0))) {
+            show_hierarchy = !show_hierarchy;
+            if (show_hierarchy) {
+                viewer.data_list[8].point_size = 5;
+                viewer.data_list[8].set_points(V, C_hierarchy); 
+            } else {
+                viewer.data_list[8].clear(); // clear edges to hide
+            }
         }
 
 

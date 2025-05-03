@@ -62,3 +62,44 @@ int find_root(const Eigen::MatrixXd& V, const Eigen::MatrixXi& E) {
 
     return root;
 }
+
+
+
+std::vector<std::vector<int>> find_ancestor_list(const Eigen::MatrixXd& V, const Eigen::MatrixXi& E, int root) {
+    // Step 1: Build adjacency list
+    std::vector<std::vector<int>> adj(V.rows());
+    for (int i = 0; i < E.rows(); ++i) {
+        adj[E(i, 0)].push_back(E(i, 1));
+        adj[E(i, 1)].push_back(E(i, 0));
+    }
+
+    std::vector<std::vector<int>> ancestor_list(V.rows());
+    std::vector<bool> visited(V.rows(), false);
+
+    std::function<void(int, int, std::vector<int>)> dfs = [&](int node, int parent, std::vector<int> ancestors) {
+        visited[node] = true;
+        ancestor_list[node] = ancestors;
+
+        // Count children (excluding parent)
+        int child_count = 0;
+        for (int neighbor : adj[node]) {
+            if (neighbor != parent && !visited[neighbor]) {
+                child_count++;
+            }
+        }
+
+        // If split (i.e., more than one child), add self to ancestor list
+        if (child_count >= 2 || node == root) {
+            ancestors.push_back(node);
+        }
+
+        for (int neighbor : adj[node]) {
+            if (neighbor != parent && !visited[neighbor]) {
+                dfs(neighbor, node, ancestors);
+            }
+        }
+    };
+
+    dfs(root, -1, {});  // start DFS from root with empty ancestor list
+    return ancestor_list;
+}
