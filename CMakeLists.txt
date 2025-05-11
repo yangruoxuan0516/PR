@@ -62,6 +62,9 @@ set(SRC_FILES
     src/connect_points/mst.cpp
 
     src/tree_hierarchy/find_hierarchy_with_root.cpp
+    src/tree_hierarchy/seperate_based_on_hierarchy.cpp
+
+    src/partition_by_propagation/weighted_tree_partition.cpp
 )
 
 # Add the executable

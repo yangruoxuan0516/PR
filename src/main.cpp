@@ -11,6 +11,7 @@
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <cstdlib>
 #include <ctime>
+#include <limits> // for quiet_NaN()
 
 #include "connect_points/travel_salesman.h"
 #include "connect_points/snake.h"
@@ -19,6 +20,9 @@
 #include "connect_points/mst.h"
 
 #include "tree_hierarchy/find_hierarchy_with_root.h"
+#include "tree_hierarchy/seperate_based_on_hierarchy.h"
+
+#include "partition_by_propagation/weighted_tree_partition.h"
 
 #include "params.h"
 
@@ -40,7 +44,7 @@ Eigen::RowVector3d hsv2rgb(double h, double s, double v) {
     return Eigen::RowVector3d(r + m, g + m, b + m);
 }
 
-Eigen::RowVector3d generate_distinct_color(int index, int total = 20) {
+Eigen::RowVector3d generate_distinct_color(int index, int total = 10) {
     double h = fmod((index * 360.0 / total), 360.0);  // 均匀分布在色相环上
     double s = 0.8;  // 高饱和
     double v = 0.9;  // 高亮度
@@ -71,12 +75,39 @@ bool loadXYZ(const std::string& filename, Eigen::MatrixXd& V) {
     return true;
 }
 
+void update_selected_layer(
+    igl::opengl::glfw::Viewer& viewer,
+    const Eigen::MatrixXd& V,
+    const Eigen::MatrixXd& C,
+    int data_id = 10)
+{
+    std::vector<int> selected_indices;
+    for (int i = 0; i < C.rows(); ++i) {
+        if (C.row(i) != default_color) {
+            selected_indices.push_back(i);
+        }
+    }
+
+    Eigen::MatrixXd V_sel(selected_indices.size(), 3);
+    Eigen::MatrixXd C_sel(selected_indices.size(), 3);
+    for (int i = 0; i < selected_indices.size(); ++i) {
+        V_sel.row(i) = V.row(selected_indices[i]);
+        C_sel.row(i) = C.row(selected_indices[i]);
+    }
+
+    viewer.data_list[data_id].clear();
+    viewer.data_list[data_id].set_points(V_sel, C_sel);
+    viewer.data_list[data_id].point_size = 10;
+}
+
+
 bool click_point(igl::opengl::glfw::Viewer& viewer,
     Eigen::MatrixXd& V,
     Eigen::MatrixXd& C,
     int button,
     int modifier,
-    const Eigen::RowVector3d& selected_color)
+    const Eigen::RowVector3d& selected_color,
+    std::vector<Eigen::RowVector3d> type_colors)
 {
     int vid = -1;
     double min_dis = 20;  // pixel threshold
@@ -100,6 +131,7 @@ bool click_point(igl::opengl::glfw::Viewer& viewer,
         if (C.row(vid) == default_color) {
             C.row(vid) = selected_color;
 
+// --- this part is just for testing ---
             // Delaunay dt;
             // insert_points_into_delaunay(V, dt);
             // Eigen::MatrixXi E_dt;
@@ -108,6 +140,7 @@ bool click_point(igl::opengl::glfw::Viewer& viewer,
             // // color also the ancestors
             // int root = find_root(V, E_mst);
             // std::vector<std::vector<int>> ancestor_list = find_ancestor_list(V, E_mst, root);
+    // -- here is the test for the ancestor list
             // std::vector<int> ancestors = ancestor_list[vid];
             // // print the ancestors
             // std::cout << "Anscestors of point " << vid << ": ";
@@ -118,12 +151,44 @@ bool click_point(igl::opengl::glfw::Viewer& viewer,
             // for (int i = 0; i < ancestors.size(); i++) {
             //     C.row(ancestors[i]) = selected_color;
             // }
+    // -- here is the test for the subtree
+            // std::vector<int> current_subtree = find_subtree(V, E_mst, ancestor_list, vid);
+            // // print the subtree
+            // std::cout << "Subtree of point " << vid << ": ";
+            // for (int i = 0; i < current_subtree.size(); i++) {
+            //     std::cout << current_subtree[i] << " ";
+            // }
+            // std::cout << std::endl;
+            // // color the subtree
+            // for (int i = 0; i < current_subtree.size(); i++) {
+            //     C.row(current_subtree[i]) = selected_color;
+            // }
+    // -- here is to test going up
+            // std::vector<int> new_subtree = going_up(V, E_mst, ancestor_list, current_subtree);
+            // // print the new subtree
+            // std::cout << "New subtree of point " << vid << ": ";
+            // for (int i = 0; i < new_subtree.size(); i++) {
+            //     std::cout << new_subtree[i] << " ";
+            // }
+            // std::cout << std::endl;
+            // // color the new subtree
+            // for (int i = 0; i < new_subtree.size(); i++) {
+            //     C.row(new_subtree[i]) = selected_color;
+            // }
+    // -- here is for testing the splitting based on the hierarchy, but it is not working
+            // Eigen::MatrixXd new_colors = seperate_based_on_hierarchy(V, E_mst, C, type_colors, ancestor_list);
+            // // print the new color length
+            // std::cout << "New color length: " << new_colors.rows() << std::endl;
+            // // print point cloud length
+            // std::cout << "Point cloud length: " << V.rows() << std::endl;
+            // viewer.data_list[9].set_points(V, new_colors);
+// --- end of the testing code ---
 
         } 
         else {
             C.row(vid) = default_color;
         }
-        viewer.data_list[0].set_points(V, C);
+        update_selected_layer(viewer, V, C);
         return true;
     }
 
@@ -141,9 +206,9 @@ Eigen::MatrixXd get_colored_points(const Eigen::MatrixXd& V, const Eigen::Matrix
         }
     }
 
-    if (selected_points.size() < 2) {
-        return Eigen::MatrixXd();
-    }
+    // if (selected_points.size() < 2) {
+    //     return Eigen::MatrixXd();
+    // }
 
     Eigen::MatrixXd points(selected_points.size(), 3);
 
@@ -197,10 +262,14 @@ int main() {
     std::string filename = "/Users/ruox/Documents/DoubleDegree/cours_2/ParcoursRecherche/projet/python/skeleton.xyz";
 
     if (!loadXYZ(filename, V)) return 1;
+    Eigen::MatrixXd default_C(V.rows(), 3);
+
     Eigen::MatrixXd C(V.rows(), 3);
     for (int i = 0; i < V.rows(); ++i) {
+        default_C.row(i) = default_color;
         C.row(i) = default_color;
     }
+
     Eigen::MatrixXi E;
 
 // --- colors
@@ -262,16 +331,18 @@ int main() {
     viewer.append_mesh(); // data_id = 6 for mst edges between selected points
     viewer.append_mesh(); // data_id = 7 for root point
     viewer.append_mesh(); // data_id = 8 for hierarchy color
+    viewer.append_mesh(); // data_id = 9 for division color
+    viewer.append_mesh(); // data_id = 10 for selected points
     
     viewer.data_list[0].point_size = 5; 
-    viewer.data_list[0].set_points(V, C);
+    viewer.data_list[0].set_points(V, default_C);
 
     viewer.core().align_camera_center(V);
     viewer.core().camera_eye = Eigen::Vector3f(0, 5, 0); // Set camera position
     viewer.core().camera_up = Eigen::Vector3f(0, 0, 1); 
 
     viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer& viewer, int button, int modifier) {
-        return click_point(viewer, V, C, button, modifier, type_colors[current_type_index]);
+        return click_point(viewer, V, C, button, modifier, type_colors[current_type_index], type_colors);
     };
 
 
@@ -289,6 +360,7 @@ int main() {
     bool show_mst_selected = false;
     bool show_root = false;
     bool show_hierarchy = false;
+    bool show_partition = false;
 
     menu.callback_draw_viewer_menu = [&]()
     {
@@ -329,16 +401,20 @@ int main() {
 
         if (ImGui::Button("Reset", ImVec2(-1, 0))) {
             viewer.data_list[0].clear(); 
+            viewer.data_list[0].set_points(V, default_C);
             viewer.data_list[1].clear(); 
             viewer.data_list[2].clear();
             viewer.data_list[3].clear();
             viewer.data_list[4].clear();
             viewer.data_list[5].clear();
             viewer.data_list[6].clear();
+            viewer.data_list[7].clear();
+            viewer.data_list[8].clear();
+            viewer.data_list[9].clear();
+            viewer.data_list[10].clear();
             for (int i = 0; i < V.rows(); ++i) {
                 C.row(i) = default_color;
             }
-            viewer.data_list[0].set_points(V, C);
             type_labels = {"Type 1"};
             current_type_index = 0;
             type_colors = { generate_distinct_color(current_type_index - 1) };
@@ -568,25 +644,63 @@ int main() {
         ImGui::Separator();
         ImGui::Text("Tree Hierarchy:");
         if (ImGui::Button("Find Root", ImVec2(-1, 0))) {
+            show_root = !show_root;
             if (show_root) {
-                show_root = false;
-                viewer.data_list[7].clear(); // clear edges to hide
-            } else {
-                show_root = true;
                 viewer.data_list[7].set_points(V.row(root), Eigen::RowVector3d(1, 0, 0)); 
+                viewer.data_list[7].point_size = 15;
+            } else {
+                viewer.data_list[7].clear();
             }   
         }
         if (ImGui::Button("Show Hierarchy Color", ImVec2(-1, 0))) {
+            std::cout << "show hierarchy color" << std::endl;
             show_hierarchy = !show_hierarchy;
             if (show_hierarchy) {
                 viewer.data_list[8].point_size = 5;
                 viewer.data_list[8].set_points(V, C_hierarchy); 
+                viewer.data_list[0].clear();
             } else {
                 viewer.data_list[8].clear(); // clear edges to hide
+                viewer.data_list[0].set_points(V, default_C);
             }
         }
 
+        ImGui::Separator();
+        ImGui::Text("Partition:");
+        if (ImGui::Button("Weighted tree partition", ImVec2(-1, 0))) {
+            show_partition = !show_partition;
+            if (show_partition) {
+                // 构建 labeled_points: map from point index to class index
+                std::unordered_map<int, int> labeled_points;
+                for (int class_id = 0; class_id < type_colors.size(); ++class_id) {
+                    Eigen::MatrixXd points = get_colored_points(V, C, type_colors[class_id]);
+                    for (int i = 0; i < points.rows(); ++i) {
+                        int index = find_closest_point(V, points.row(i));
+                        labeled_points[index] = class_id;
+                    }
+                }
 
+                // 调用 partition 函数
+                std::unordered_map<int, int> partition = weighted_tree_partition(V, E_mst, labeled_points);
+
+                // 构建颜色矩阵
+                Eigen::MatrixXd C_partition(V.rows(), 3);
+                for (int i = 0; i < V.rows(); ++i) {
+                    if (partition.count(i)) {
+                        int class_id = partition[i];
+                        C_partition.row(i) = generate_distinct_color(class_id);
+                    } else {
+                        C_partition.row(i) = default_color; // fallback for未覆盖点（理论上不会有）
+                    }
+                }
+                viewer.data_list[9].set_points(V, C_partition);
+                viewer.data_list[9].point_size = 7;
+                viewer.data_list[0].clear();
+            } else {
+                viewer.data_list[9].clear();
+                viewer.data_list[0].set_points(V, default_C);
+            }
+        }
         ImGui::End(); 
     };
 
