@@ -26,7 +26,6 @@
 
 #include "params.h"
 
-Eigen::RowVector3d default_color(0.5, 0.5, 0.5); 
 
 Eigen::RowVector3d hsv2rgb(double h, double s, double v) {
     double c = v * s;
@@ -43,6 +42,7 @@ Eigen::RowVector3d hsv2rgb(double h, double s, double v) {
 
     return Eigen::RowVector3d(r + m, g + m, b + m);
 }
+
 
 Eigen::RowVector3d generate_distinct_color(int index, int total = 10) {
     double h = fmod((index * 360.0 / total), 360.0);  // 均匀分布在色相环上
@@ -79,6 +79,7 @@ void update_selected_layer(
     igl::opengl::glfw::Viewer& viewer,
     const Eigen::MatrixXd& V,
     const Eigen::MatrixXd& C,
+    Eigen::RowVector3d default_color,
     int data_id = 10)
 {
     std::vector<int> selected_indices;
@@ -107,7 +108,8 @@ bool click_point(igl::opengl::glfw::Viewer& viewer,
     int button,
     int modifier,
     const Eigen::RowVector3d& selected_color,
-    std::vector<Eigen::RowVector3d> type_colors)
+    std::vector<Eigen::RowVector3d> type_colors,
+    Eigen::RowVector3d default_color)
 {
     int vid = -1;
     double min_dis = 20;  // pixel threshold
@@ -188,7 +190,7 @@ bool click_point(igl::opengl::glfw::Viewer& viewer,
         else {
             C.row(vid) = default_color;
         }
-        update_selected_layer(viewer, V, C);
+        update_selected_layer(viewer, V, C, default_color);
         return true;
     }
 
@@ -262,7 +264,10 @@ int main() {
     std::string filename = "/Users/ruox/Documents/DoubleDegree/cours_2/ParcoursRecherche/projet/python/skeleton.xyz";
 
     if (!loadXYZ(filename, V)) return 1;
+
     Eigen::MatrixXd default_C(V.rows(), 3);
+
+    Eigen::RowVector3d default_color = Eigen::RowVector3d(0.5, 0.5, 0.5);
 
     Eigen::MatrixXd C(V.rows(), 3);
     for (int i = 0; i < V.rows(); ++i) {
@@ -331,8 +336,9 @@ int main() {
     viewer.append_mesh(); // data_id = 6 for mst edges between selected points
     viewer.append_mesh(); // data_id = 7 for root point
     viewer.append_mesh(); // data_id = 8 for hierarchy color
-    viewer.append_mesh(); // data_id = 9 for division color
+    viewer.append_mesh(); // data_id = 9 for point wise partition
     viewer.append_mesh(); // data_id = 10 for selected points
+    viewer.append_mesh(); // data_id = 11 for segment wise partition
     
     viewer.data_list[0].point_size = 5; 
     viewer.data_list[0].set_points(V, default_C);
@@ -342,7 +348,7 @@ int main() {
     viewer.core().camera_up = Eigen::Vector3f(0, 0, 1); 
 
     viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer& viewer, int button, int modifier) {
-        return click_point(viewer, V, C, button, modifier, type_colors[current_type_index], type_colors);
+        return click_point(viewer, V, C, button, modifier, type_colors[current_type_index], type_colors, default_color);
     };
 
 
@@ -373,16 +379,6 @@ int main() {
 
         ImGui::Separator();
 
-        ImGui::Text("Snake Params:");
-        ImGui::SliderInt("snake iteration num", &params.snake_iteration_num, 0, 100);
-        ImGui::SliderFloat("snake step", &params.snake_step, 0.0f, 0.2f);
-        ImGui::SliderInt("snake resample num", &params.snake_resample_num, 0, 100);
-        ImGui::SliderFloat("weight elastic", &params.weight_elastic, 0.0f, 10.0f);
-        ImGui::SliderFloat("weight curvature", &params.weight_curvature, 0.0f, 10.0f);
-        ImGui::SliderFloat("weight attraction", &params.weight_attraction, 0.0f, 100.0f);
-        
-
-        ImGui::Separator();
         ImGui::Text("Point Type Selection:");
     
         // Render each type as a selectable button
@@ -412,6 +408,7 @@ int main() {
             viewer.data_list[8].clear();
             viewer.data_list[9].clear();
             viewer.data_list[10].clear();
+            viewer.data_list[11].clear();
             for (int i = 0; i < V.rows(); ++i) {
                 C.row(i) = default_color;
             }
@@ -420,7 +417,19 @@ int main() {
             type_colors = { generate_distinct_color(current_type_index - 1) };
         }
 
+/*
         ImGui::Separator();
+        ImGui::Text("Snake Params:");
+        ImGui::SliderInt("snake iteration num", &params.snake_iteration_num, 0, 100);
+        ImGui::SliderFloat("snake step", &params.snake_step, 0.0f, 0.2f);
+        ImGui::SliderInt("snake resample num", &params.snake_resample_num, 0, 100);
+        ImGui::SliderFloat("weight elastic", &params.weight_elastic, 0.0f, 10.0f);
+        ImGui::SliderFloat("weight curvature", &params.weight_curvature, 0.0f, 10.0f);
+        ImGui::SliderFloat("weight attraction", &params.weight_attraction, 0.0f, 100.0f);
+        
+
+        ImGui::Separator();
+
         ImGui::Text("Snake Connection:");
 
         if (ImGui::Button("connect with snake", ImVec2(-1, 0))) { 
@@ -576,6 +585,7 @@ int main() {
 
 
         ImGui::Separator();
+
         ImGui::Text("Minimum Spanning Tree:");
 
         if (ImGui::Button("Minimum Spanning Tree", ImVec2(-1, 0))) {
@@ -664,10 +674,11 @@ int main() {
                 viewer.data_list[0].set_points(V, default_C);
             }
         }
-
+*/
         ImGui::Separator();
         ImGui::Text("Partition:");
-        if (ImGui::Button("Weighted tree partition", ImVec2(-1, 0))) {
+
+        if (ImGui::Button("Point-wise partition", ImVec2(-1, 0))) {
             show_partition = !show_partition;
             if (show_partition) {
                 // 构建 labeled_points: map from point index to class index
@@ -681,7 +692,47 @@ int main() {
                 }
 
                 // 调用 partition 函数
-                std::unordered_map<int, int> partition = weighted_tree_partition(V, E_mst, labeled_points);
+                std::unordered_map<int, int> partition = pointwise_partition_with_dijkstra(V, E_mst, labeled_points);
+
+                // 构建颜色矩阵
+                Eigen::MatrixXd C_partition_p(V.rows(), 3);
+                for (int i = 0; i < V.rows(); ++i) {
+                    if (partition.count(i)) {
+                        int class_id = partition[i];
+                        C_partition_p.row(i) = generate_distinct_color(class_id);
+                    } else {
+                        C_partition_p.row(i) = default_color; // fallback for未覆盖点（理论上不会有）
+                    }
+                }
+                viewer.data_list[9].set_points(V, C_partition_p);
+                viewer.data_list[9].point_size = 7;
+                viewer.data_list[9].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
+                viewer.data_list[0].clear();
+            } else {
+                viewer.data_list[9].clear();
+                viewer.data_list[0].set_points(V, default_C);
+            }
+        }
+
+
+
+        Eigen::MatrixXd C_debug;
+
+        if (ImGui::Button("Segment-wise partition", ImVec2(-1, 0))) {
+            show_partition = !show_partition;
+            if (show_partition) {
+                // 构建 labeled_points: map from point index to class index
+                std::unordered_map<int, int> labeled_points;
+                for (int class_id = 0; class_id < type_colors.size(); ++class_id) {
+                    Eigen::MatrixXd points = get_colored_points(V, C, type_colors[class_id]);
+                    for (int i = 0; i < points.rows(); ++i) {
+                        int index = find_closest_point(V, points.row(i));
+                        labeled_points[index] = class_id;
+                    }
+                }
+
+                // 调用 partition 函数
+                std::unordered_map<int, int> partition = segment_based_partition_based_on_dijkstra(V, E_mst, labeled_points, &C_debug);
 
                 // 构建颜色矩阵
                 Eigen::MatrixXd C_partition(V.rows(), 3);
@@ -693,14 +744,18 @@ int main() {
                         C_partition.row(i) = default_color; // fallback for未覆盖点（理论上不会有）
                     }
                 }
-                viewer.data_list[9].set_points(V, C_partition);
-                viewer.data_list[9].point_size = 7;
+                viewer.data_list[11].set_points(V, C_partition);
+                // viewer.data_list[9].set_points(V, C_debug);
+                viewer.data_list[11].point_size = 7;
+                viewer.data_list[11].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
                 viewer.data_list[0].clear();
             } else {
-                viewer.data_list[9].clear();
+                viewer.data_list[11].clear();
                 viewer.data_list[0].set_points(V, default_C);
             }
         }
+
+
         ImGui::End(); 
     };
 

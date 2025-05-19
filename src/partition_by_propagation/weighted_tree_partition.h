@@ -6,21 +6,22 @@
 #include <queue>
 #include <vector>
 #include <Eigen/Dense>
+#include <iostream>
+#include <cmath>
+#include <limits>
 
-struct QueueElement {
-    double dist;
-    int node;
-    int class_id;
-
-    bool operator>(const QueueElement& other) const {
-        return dist > other.dist;
-    }
-};
-
-std::unordered_map<int, int> weighted_tree_partition(
+std::unordered_map<int, int> pointwise_partition_with_dijkstra(
     const Eigen::MatrixXd& V,
     const Eigen::MatrixXi& E_mst,
     const std::unordered_map<int, int>& labeled_points
+);
+
+
+std::unordered_map<int, int> segment_based_partition_based_on_dijkstra(
+    const Eigen::MatrixXd& V,
+    const Eigen::MatrixXi& E_mst,
+    const std::unordered_map<int, int>& labeled_points,
+    Eigen::MatrixXd* debug_colors = nullptr
 );
 
 #endif // WEIGHTED_TREE_PARTITION_H
