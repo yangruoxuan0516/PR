@@ -1,6 +1,7 @@
 #include <igl/opengl/glfw/Viewer.h>
 #include <igl/project.h>
 #include <igl/unproject.h>
+#include <igl/edges.h>
 #include <fstream>
 #include <iostream>
 #include <igl/opengl/glfw/imgui/ImGuiPlugin.h>
@@ -22,7 +23,8 @@
 #include "tree_hierarchy/find_hierarchy_with_root.h"
 #include "tree_hierarchy/seperate_based_on_hierarchy.h"
 
-#include "partition_by_propagation/weighted_tree_partition.h"
+#include "partition/propagate_weighted_tree.h"
+#include "partition/seperate_into_components.h"
 
 #include "params.h"
 
@@ -80,7 +82,7 @@ void update_selected_layer(
     const Eigen::MatrixXd& V,
     const Eigen::MatrixXd& C,
     Eigen::RowVector3d default_color,
-    int data_id = 10)
+    int data_id)
 {
     std::vector<int> selected_indices;
     for (int i = 0; i < C.rows(); ++i) {
@@ -109,7 +111,8 @@ bool click_point(igl::opengl::glfw::Viewer& viewer,
     int modifier,
     const Eigen::RowVector3d& selected_color,
     std::vector<Eigen::RowVector3d> type_colors,
-    Eigen::RowVector3d default_color)
+    Eigen::RowVector3d default_color,
+    int& index_selected_points)
 {
     int vid = -1;
     double min_dis = 20;  // pixel threshold
@@ -183,14 +186,14 @@ bool click_point(igl::opengl::glfw::Viewer& viewer,
             // std::cout << "New color length: " << new_colors.rows() << std::endl;
             // // print point cloud length
             // std::cout << "Point cloud length: " << V.rows() << std::endl;
-            // viewer.data_list[9].set_points(V, new_colors);
+            // viewer.data_list[index_pointwise_partition].set_points(V, new_colors);
 // --- end of the testing code ---
 
         } 
         else {
             C.row(vid) = default_color;
         }
-        update_selected_layer(viewer, V, C, default_color);
+        update_selected_layer(viewer, V, C, default_color, index_selected_points);
         return true;
     }
 
@@ -259,21 +262,38 @@ std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> connect_points_with_snake(GUIParams
 
 int main() {
 // --- load the point cloud
-    Eigen::MatrixXd V;
+    Eigen::MatrixXd V, V_ori;
     // std::string filename = "/Users/ruox/Documents/DoubleDegree/cours_2/ParcoursRecherche/projet/generate_example_point_cloud/point_cloud/X_form_C.xyz";
-    std::string filename = "/Users/ruox/Documents/DoubleDegree/cours_2/ParcoursRecherche/projet/python/skeleton.xyz";
+    std::string filename_ori = "/Users/ruox/Documents/DoubleDegree/cours_2/ParcoursRecherche/projet/example-project/data/points.xyz";
+    // std::string filename = "/Users/ruox/Documents/DoubleDegree/cours_2/ParcoursRecherche/projet/python/skeleton_raw_0.05.xyz";
+    std::string filename = "/Users/ruox/Documents/DoubleDegree/cours_2/ParcoursRecherche/projet/example-project/data/skeleton.xyz";
 
+
+
+    Eigen::MatrixXd V_surface;  // 顶点
+    Eigen::MatrixXi F_surface;  // 面
+    igl::readOBJ("/Users/ruox/Documents/DoubleDegree/cours_2/ParcoursRecherche/projet/example-project/data/vessel_surface.obj", V_surface, F_surface);
+
+
+    if (!loadXYZ(filename_ori, V_ori)) return 1;
     if (!loadXYZ(filename, V)) return 1;
 
     Eigen::MatrixXd default_C(V.rows(), 3);
 
-    Eigen::RowVector3d default_color = Eigen::RowVector3d(0.5, 0.5, 0.5);
+    Eigen::RowVector3d default_color = Eigen::RowVector3d(1, 0, 0);
 
     Eigen::MatrixXd C(V.rows(), 3);
     for (int i = 0; i < V.rows(); ++i) {
         default_C.row(i) = default_color;
         C.row(i) = default_color;
     }
+
+    Eigen::MatrixXd C_ori(V_ori.rows(), 3);
+    for (int i = 0; i < V_ori.rows(); ++i) {
+        C_ori.row(i) = Eigen::RowVector3d(0.5, 0.5, 1);
+    }
+
+    Eigen::MatrixXd C_components;
 
     Eigen::MatrixXi E;
 
@@ -321,34 +341,39 @@ int main() {
         int level = ancestor_list[i].size();
         C_hierarchy.row(i) = generate_distinct_color(level);
     }
-    // I will add a button to show the hierarchy color
+
 
 // --- viewer
     igl::opengl::glfw::Viewer viewer;
     viewer.core().background_color = Eigen::Vector4f(1.0, 1.0, 1.0, 1.0);  // R, G, B, A
 
-    viewer.append_mesh(); // data_id = 0 for static original points
-    viewer.append_mesh(); // data_id = 1 for dynamic KNN points
-    viewer.append_mesh(); // data_id = 2 for dynamic curve points
-    viewer.append_mesh(); // data_id = 3 for delaunay edges
-    viewer.append_mesh(); // data_id = 4 for delaunay edges between selected points
-    viewer.append_mesh(); // data_id = 5 for mst
-    viewer.append_mesh(); // data_id = 6 for mst edges between selected points
-    viewer.append_mesh(); // data_id = 7 for root point
-    viewer.append_mesh(); // data_id = 8 for hierarchy color
-    viewer.append_mesh(); // data_id = 9 for point wise partition
-    viewer.append_mesh(); // data_id = 10 for selected points
-    viewer.append_mesh(); // data_id = 11 for segment wise partition
+    int index_point_cloud = viewer.append_mesh(); 
+    int index_skeleton = viewer.append_mesh();
+    int index_selected_points = viewer.append_mesh();
+    int index_snake = viewer.append_mesh(); 
+    int index_delaunay = viewer.append_mesh(); // data_id = 3 for delaunay edges
+    int index_delaunay_dijkstra = viewer.append_mesh(); // data_id = 4 for delaunay edges between selected points
+    int index_mst = viewer.append_mesh(); // data_id = 5 for mst
+    int index_mst_dijkstra = viewer.append_mesh(); // data_id = 6 for mst edges between selected points
+    int index_root = viewer.append_mesh(); // data_id = 7 for root point
+    int index_hierarchy = viewer.append_mesh(); // data_id = 8 for hierarchy color
+    int index_pointwise_partition = viewer.append_mesh(); // data_id = 9 for point wise partition
+    int index_segmentwise_partition = viewer.append_mesh(); // data_id = 11 for segment wise partition
+
+
+
+    viewer.data_list[index_point_cloud].point_size = 2; 
+    viewer.data_list[index_point_cloud].set_points(V_ori, C_ori); // Original points
     
-    viewer.data_list[0].point_size = 5; 
-    viewer.data_list[0].set_points(V, default_C);
+    viewer.data_list[index_skeleton].point_size = 3; 
+    viewer.data_list[index_skeleton].set_points(V, default_C);
 
     viewer.core().align_camera_center(V);
     viewer.core().camera_eye = Eigen::Vector3f(0, 5, 0); // Set camera position
     viewer.core().camera_up = Eigen::Vector3f(0, 0, 1); 
 
     viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer& viewer, int button, int modifier) {
-        return click_point(viewer, V, C, button, modifier, type_colors[current_type_index], type_colors, default_color);
+        return click_point(viewer, V, C, button, modifier, type_colors[current_type_index], type_colors, default_color, index_selected_points);
     };
 
 
@@ -367,6 +392,7 @@ int main() {
     bool show_root = false;
     bool show_hierarchy = false;
     bool show_partition = false;
+    bool show_components = false;
 
     menu.callback_draw_viewer_menu = [&]()
     {
@@ -375,7 +401,9 @@ int main() {
         ImGui::Begin("Menu", nullptr, ImGuiWindowFlags_NoCollapse);
 
         ImGui::Text("Demostration Settings:");
-        ImGui::SliderFloat("Point radius", &viewer.data_list[0].point_size, 0.001f, 10.0f);
+        ImGui::SliderFloat("Skeleton point radius", &viewer.data_list[index_skeleton].point_size, 0.001f, 5.0f);
+        ImGui::SliderFloat("Point cloud point radius", &viewer.data_list[index_point_cloud].point_size, 0.001f, 5.0f);
+
 
         ImGui::Separator();
 
@@ -396,19 +424,11 @@ int main() {
         }
 
         if (ImGui::Button("Reset", ImVec2(-1, 0))) {
-            viewer.data_list[0].clear(); 
-            viewer.data_list[0].set_points(V, default_C);
-            viewer.data_list[1].clear(); 
-            viewer.data_list[2].clear();
-            viewer.data_list[3].clear();
-            viewer.data_list[4].clear();
-            viewer.data_list[5].clear();
-            viewer.data_list[6].clear();
-            viewer.data_list[7].clear();
-            viewer.data_list[8].clear();
-            viewer.data_list[9].clear();
-            viewer.data_list[10].clear();
-            viewer.data_list[11].clear();
+            for (int i = 0; i < viewer.data_list.size(); ++i) {
+                viewer.data_list[i].clear();
+            }
+            viewer.data_list[index_point_cloud].set_points(V_ori, C_ori);
+            viewer.data_list[index_skeleton].set_points(V, default_C);
             for (int i = 0; i < V.rows(); ++i) {
                 C.row(i) = default_color;
             }
@@ -471,7 +491,7 @@ int main() {
                 for (int i = 0; i < all_colors.size(); ++i) {
                     C_all.row(i) = all_colors[i];
                 }
-                viewer.data_list[2].set_edges(V_all, E_all, C_all); 
+                viewer.data_list[index_snake].set_edges(V_all, E_all, C_all); 
             }
         }
 
@@ -485,21 +505,21 @@ int main() {
             optimize_snake_complete();
         }
         if (ImGui::Button("Unshow snake", ImVec2(-1, 0))) {
-            viewer.data_list[2].clear(); 
+            viewer.data_list[index_snake].clear(); 
         }
 
 
-
+*/
         ImGui::Separator();
         ImGui::Text("Delaunay Triangulation:");
 
         if (ImGui::Button("Delaunay Triangulation", ImVec2(-1, 0))) {
             show_delaunay = !show_delaunay;
             if (show_delaunay) {
-                viewer.data_list[3].set_edges(V, E_dt_filtered, Eigen::RowVector3d(0.0, 0.0, 0.0));
+                viewer.data_list[index_delaunay].set_edges(V, E_dt_filtered, Eigen::RowVector3d(0.0, 0.0, 0.0));
             }
             else {
-                viewer.data_list[3].clear(); 
+                viewer.data_list[index_delaunay].clear(); 
             }
         }
 
@@ -522,12 +542,12 @@ int main() {
                 E_dt_filtered.row(i) = filtered_edges[i];
             }
             if (show_delaunay) {
-                viewer.data_list[3].clear();
-                viewer.data_list[3].set_edges(V, E_dt_filtered, Eigen::RowVector3d(0.0, 0.0, 0.0)); 
+                viewer.data_list[index_delaunay].clear();
+                viewer.data_list[index_delaunay].set_edges(V, E_dt_filtered, Eigen::RowVector3d(0.0, 0.0, 0.0)); 
             }
             else
             {
-                viewer.data_list[3].clear(); // clear edges to hide
+                viewer.data_list[index_delaunay].clear(); // clear edges to hide
             }
         }
 
@@ -575,11 +595,11 @@ int main() {
                     for (int i = 0; i < all_colors.size(); ++i) {
                         C_all.row(i) = all_colors[i];
                     }
-                    viewer.data_list[4].set_edges(V, E_all, C_all); 
+                    viewer.data_list[index_delaunay_dijkstra].set_edges(V, E_all, C_all); 
                 }
             }
             else {
-                viewer.data_list[4].clear(); // clear edges to hide
+                viewer.data_list[index_delaunay_dijkstra].clear(); // clear edges to hide
             }
         }
 
@@ -591,10 +611,10 @@ int main() {
         if (ImGui::Button("Minimum Spanning Tree", ImVec2(-1, 0))) {
             show_mst = !show_mst;
             if (show_mst) {
-                viewer.data_list[5].set_edges(V, E_mst, Eigen::RowVector3d(0, 0, 0));
+                viewer.data_list[index_mst].set_edges(V, E_mst, Eigen::RowVector3d(0, 0, 0));
             }
             else {
-                viewer.data_list[5].clear(); // clear edges to hide
+                viewer.data_list[index_mst].clear(); // clear edges to hide
             }
         }
 
@@ -643,11 +663,11 @@ int main() {
                     for (int i = 0; i < all_colors.size(); ++i) {
                         C_all.row(i) = all_colors[i];
                     }
-                    viewer.data_list[6].set_edges(V, E_all, C_all); 
+                    viewer.data_list[index_mst_dijkstra].set_edges(V, E_all, C_all); 
                 }
             }
             else {
-                viewer.data_list[6].clear(); // clear edges to hide
+                viewer.data_list[index_mst_dijkstra].clear(); // clear edges to hide
             }
         }
 
@@ -656,25 +676,25 @@ int main() {
         if (ImGui::Button("Find Root", ImVec2(-1, 0))) {
             show_root = !show_root;
             if (show_root) {
-                viewer.data_list[7].set_points(V.row(root), Eigen::RowVector3d(1, 0, 0)); 
-                viewer.data_list[7].point_size = 15;
+                viewer.data_list[index_root].set_points(V.row(root), Eigen::RowVector3d(1, 0, 0)); 
+                viewer.data_list[index_root].point_size = 15;
             } else {
-                viewer.data_list[7].clear();
+                viewer.data_list[index_root].clear();
             }   
         }
         if (ImGui::Button("Show Hierarchy Color", ImVec2(-1, 0))) {
             std::cout << "show hierarchy color" << std::endl;
             show_hierarchy = !show_hierarchy;
             if (show_hierarchy) {
-                viewer.data_list[8].point_size = 5;
-                viewer.data_list[8].set_points(V, C_hierarchy); 
-                viewer.data_list[0].clear();
+                viewer.data_list[index_hierarchy].point_size = 5;
+                viewer.data_list[index_hierarchy].set_points(V, C_hierarchy); 
+                viewer.data_list[index_skeleton].clear();
             } else {
-                viewer.data_list[8].clear(); // clear edges to hide
-                viewer.data_list[0].set_points(V, default_C);
+                viewer.data_list[index_hierarchy].clear(); // clear edges to hide
+                viewer.data_list[index_skeleton].set_points(V, default_C);
             }
         }
-*/
+
         ImGui::Separator();
         ImGui::Text("Partition:");
 
@@ -704,13 +724,13 @@ int main() {
                         C_partition_p.row(i) = default_color; // fallback for未覆盖点（理论上不会有）
                     }
                 }
-                viewer.data_list[9].set_points(V, C_partition_p);
-                viewer.data_list[9].point_size = 7;
-                viewer.data_list[9].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
-                viewer.data_list[0].clear();
+                viewer.data_list[index_pointwise_partition].set_points(V, C_partition_p);
+                viewer.data_list[index_pointwise_partition].point_size = 7;
+                viewer.data_list[index_pointwise_partition].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
+                viewer.data_list[index_skeleton].clear();
             } else {
-                viewer.data_list[9].clear();
-                viewer.data_list[0].set_points(V, default_C);
+                viewer.data_list[index_pointwise_partition].clear();
+                viewer.data_list[index_skeleton].set_points(V, default_C);
             }
         }
 
@@ -744,16 +764,51 @@ int main() {
                         C_partition.row(i) = default_color; // fallback for未覆盖点（理论上不会有）
                     }
                 }
-                viewer.data_list[11].set_points(V, C_partition);
-                // viewer.data_list[9].set_points(V, C_debug);
-                viewer.data_list[11].point_size = 7;
-                viewer.data_list[11].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
-                viewer.data_list[0].clear();
+                viewer.data_list[index_segmentwise_partition].set_points(V, C_partition);
+                // viewer.data_list[index_pointwise_partition].set_points(V, C_debug);
+                viewer.data_list[index_segmentwise_partition].point_size = 7;
+                viewer.data_list[index_segmentwise_partition].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
+                viewer.data_list[index_skeleton].clear();
             } else {
-                viewer.data_list[11].clear();
-                viewer.data_list[0].set_points(V, default_C);
+                viewer.data_list[index_segmentwise_partition].clear();
+                viewer.data_list[index_skeleton].set_points(V, default_C);
             }
         }
+
+
+        ImGui::Separator();
+        ImGui::Text("Connected Components:");
+        static float component_radius = 2.5f;
+        ImGui::SliderFloat("Component radius", &component_radius, 0.0f, 5.0f);
+        ImGui::Text("Radius: %.2f", component_radius);
+
+
+        if (ImGui::Button("Show Connected Components", ImVec2(-1, 0))) {
+            show_components = !show_components;
+
+            if (show_components) {
+                auto components = seperate_into_components(V, component_radius);
+                C_components.resize(V.rows(), 3);
+
+                for (int i = 0; i < components.size(); ++i) {
+                    Eigen::RowVector3d color = generate_distinct_color(i, components.size());
+                    for (int idx : components[i]) {
+                        C_components.row(idx) = color;
+                    }
+                }
+
+                viewer.data_list[index_hierarchy].clear();  // 复用 data_id = 8
+                viewer.data_list[index_hierarchy].point_size = 5;
+                viewer.data_list[index_hierarchy].set_points(V, C_components);
+                viewer.data_list[index_skeleton].clear();  // 默认颜色图层清除
+                std::cout << "Component count: " << components.size() << std::endl;
+
+            } else {
+                viewer.data_list[index_hierarchy].clear();
+                viewer.data_list[index_skeleton].set_points(V, default_C);
+            }
+        }
+
 
 
         ImGui::End(); 

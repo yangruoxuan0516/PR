@@ -1,4 +1,4 @@
-#include "weighted_tree_partition.h"
+#include "propagate_weighted_tree.h"
 
 
 struct QueueElement {

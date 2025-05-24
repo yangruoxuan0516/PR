@@ -1,5 +1,5 @@
-#ifndef WEIGHTED_TREE_PARTITION_H
-#define WEIGHTED_TREE_PARTITION_H
+#ifndef PROPAGATE_WEIGHTED_TREE_H
+#define PROPAGATE_WEIGHTED_TREE_H
 
 #include <unordered_map>
 #include <unordered_set>
@@ -24,4 +24,4 @@ std::unordered_map<int, int> segment_based_partition_based_on_dijkstra(
     Eigen::MatrixXd* debug_colors = nullptr
 );
 
-#endif // WEIGHTED_TREE_PARTITION_H
+#endif // PROPAGATE_WEIGHTED_TREE_H
