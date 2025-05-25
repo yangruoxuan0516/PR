@@ -27,31 +27,7 @@
 #include "partition/seperate_into_components.h"
 
 #include "params.h"
-
-
-Eigen::RowVector3d hsv2rgb(double h, double s, double v) {
-    double c = v * s;
-    double x = c * (1 - std::abs(fmod(h / 60.0, 2) - 1));
-    double m = v - c;
-    double r, g, b;
-
-    if (h < 60)       r = c, g = x, b = 0;
-    else if (h < 120) r = x, g = c, b = 0;
-    else if (h < 180) r = 0, g = c, b = x;
-    else if (h < 240) r = 0, g = x, b = c;
-    else if (h < 300) r = x, g = 0, b = c;
-    else              r = c, g = 0, b = x;
-
-    return Eigen::RowVector3d(r + m, g + m, b + m);
-}
-
-
-Eigen::RowVector3d generate_distinct_color(int index, int total = 10) {
-    double h = fmod((index * 360.0 / total), 360.0);  // 均匀分布在色相环上
-    double s = 0.8;  // 高饱和
-    double v = 0.9;  // 高亮度
-    return hsv2rgb(h, s, v);
-}
+#include "utils/color_utils.h"
 
 
 
@@ -112,7 +88,8 @@ bool click_point(igl::opengl::glfw::Viewer& viewer,
     const Eigen::RowVector3d& selected_color,
     std::vector<Eigen::RowVector3d> type_colors,
     Eigen::RowVector3d default_color,
-    int& index_selected_points)
+    int& index_selected_points,
+    std::vector<int> point_to_component_id)
 {
     int vid = -1;
     double min_dis = 20;  // pixel threshold
@@ -135,6 +112,8 @@ bool click_point(igl::opengl::glfw::Viewer& viewer,
     if (vid != -1) {
         if (C.row(vid) == default_color) {
             C.row(vid) = selected_color;
+            // print the component id
+            std::cout << "Component ID: " << point_to_component_id[vid] << std::endl;
 
 // --- this part is just for testing ---
             // Delaunay dt;
@@ -293,8 +272,6 @@ int main() {
         C_ori.row(i) = Eigen::RowVector3d(0.5, 0.5, 1);
     }
 
-    Eigen::MatrixXd C_components;
-
     Eigen::MatrixXi E;
 
 // --- colors
@@ -342,6 +319,23 @@ int main() {
         C_hierarchy.row(i) = generate_distinct_color(level);
     }
 
+// --- components, then dijkstra and mst on each component
+    static float component_radius = 2.5f;
+    auto component_graphs = get_component_graphs(V, component_radius);
+
+    Eigen::MatrixXd comp_V, comp_C_vertices;
+    component_graph_vertices(component_graphs, comp_V, comp_C_vertices);
+
+    Eigen::MatrixXd P1, P2, comp_C_edges;
+    component_graph_edges(component_graphs, P1, P2, comp_C_edges);
+
+    std::vector<int> point_to_component_id(V.rows(), -1);
+    for (int i = 0; i < component_graphs.size(); ++i) {
+        for (int idx : component_graphs[i].global_indices) {
+            point_to_component_id[idx] = component_graphs[i].component_id;
+        }
+    }
+
 
 // --- viewer
     igl::opengl::glfw::Viewer viewer;
@@ -351,14 +345,16 @@ int main() {
     int index_skeleton = viewer.append_mesh();
     int index_selected_points = viewer.append_mesh();
     int index_snake = viewer.append_mesh(); 
-    int index_delaunay = viewer.append_mesh(); // data_id = 3 for delaunay edges
-    int index_delaunay_dijkstra = viewer.append_mesh(); // data_id = 4 for delaunay edges between selected points
-    int index_mst = viewer.append_mesh(); // data_id = 5 for mst
-    int index_mst_dijkstra = viewer.append_mesh(); // data_id = 6 for mst edges between selected points
-    int index_root = viewer.append_mesh(); // data_id = 7 for root point
-    int index_hierarchy = viewer.append_mesh(); // data_id = 8 for hierarchy color
-    int index_pointwise_partition = viewer.append_mesh(); // data_id = 9 for point wise partition
-    int index_segmentwise_partition = viewer.append_mesh(); // data_id = 11 for segment wise partition
+    int index_delaunay = viewer.append_mesh(); 
+    int index_delaunay_dijkstra = viewer.append_mesh(); 
+    int index_mst = viewer.append_mesh(); 
+    int index_mst_dijkstra = viewer.append_mesh();
+    int index_root = viewer.append_mesh(); 
+    int index_hierarchy = viewer.append_mesh(); 
+    int index_pointwise_partition = viewer.append_mesh(); 
+    int index_segmentwise_partition = viewer.append_mesh(); 
+    int index_components = viewer.append_mesh(); 
+    int index_components_mst = viewer.append_mesh();
 
 
 
@@ -373,7 +369,7 @@ int main() {
     viewer.core().camera_up = Eigen::Vector3f(0, 0, 1); 
 
     viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer& viewer, int button, int modifier) {
-        return click_point(viewer, V, C, button, modifier, type_colors[current_type_index], type_colors, default_color, index_selected_points);
+        return click_point(viewer, V, C, button, modifier, type_colors[current_type_index], type_colors, default_color, index_selected_points, point_to_component_id);
     };
 
 
@@ -393,6 +389,7 @@ int main() {
     bool show_hierarchy = false;
     bool show_partition = false;
     bool show_components = false;
+    bool show_components_mst = false;
 
     menu.callback_draw_viewer_menu = [&]()
     {
@@ -524,9 +521,9 @@ int main() {
         }
 
         // get max in dt_edge_lengths
-        bool updated = ImGui::SliderFloat("max edge length", &filter_edge_length, 0.0f, max_edge_length);
+        bool updated_delaunay = ImGui::SliderFloat("max edge length", &filter_edge_length, 0.0f, max_edge_length);
         
-        if (updated) {
+        if (updated_delaunay) {
             std::vector<Eigen::Vector2i> filtered_edges;
             for (int i = 0; i < E_dt.rows(); ++i)
             {
@@ -778,35 +775,99 @@ int main() {
 
         ImGui::Separator();
         ImGui::Text("Connected Components:");
-        static float component_radius = 2.5f;
-        ImGui::SliderFloat("Component radius", &component_radius, 0.0f, 5.0f);
-        ImGui::Text("Radius: %.2f", component_radius);
+        
+        bool slider_changed = ImGui::SliderFloat("Component radius", &component_radius, 0.0f, 10.0f);
+
+        static float last_component_radius = component_radius;
+
+        bool update_components = false;
+        if (slider_changed && std::abs(component_radius - last_component_radius) >= 0.1f) {
+            update_components = true;
+            last_component_radius = component_radius;
+        }
 
 
         if (ImGui::Button("Show Connected Components", ImVec2(-1, 0))) {
             show_components = !show_components;
 
-            if (show_components) {
-                auto components = seperate_into_components(V, component_radius);
-                C_components.resize(V.rows(), 3);
+                if (show_components) {
 
-                for (int i = 0; i < components.size(); ++i) {
-                    Eigen::RowVector3d color = generate_distinct_color(i, components.size());
-                    for (int idx : components[i]) {
-                        C_components.row(idx) = color;
+                        viewer.data_list[index_components].add_points(comp_V, comp_C_vertices);
+
+                        viewer.data_list[index_components].point_size = 5;
+                        viewer.data_list[index_skeleton].clear();
+
+                    } else {
+                        viewer.data_list[index_components].clear();
+                        viewer.data_list[index_skeleton].set_points(V, default_C);
                     }
+            }
+
+        if (ImGui::Button("Show MST of Each Components", ImVec2(-1, 0))) {
+            show_components_mst = !show_components_mst;
+
+            if (show_components_mst) {
+
+                for (int i = 0; i < P1.rows(); ++i) {
+                    viewer.data_list[index_components_mst].add_edges(P1.row(i), P2.row(i), comp_C_edges.row(i));
                 }
 
-                viewer.data_list[index_hierarchy].clear();  // 复用 data_id = 8
-                viewer.data_list[index_hierarchy].point_size = 5;
-                viewer.data_list[index_hierarchy].set_points(V, C_components);
-                viewer.data_list[index_skeleton].clear();  // 默认颜色图层清除
-                std::cout << "Component count: " << components.size() << std::endl;
+                viewer.data_list[index_skeleton].clear();
 
             } else {
-                viewer.data_list[index_hierarchy].clear();
+                viewer.data_list[index_components_mst].clear();
                 viewer.data_list[index_skeleton].set_points(V, default_C);
             }
+        }
+
+        if (update_components) {
+            viewer.data_list[index_components].clear();
+            viewer.data_list[index_components_mst].clear();
+
+            component_graphs = get_component_graphs(V, component_radius);
+
+            for (int i = 0; i < component_graphs.size(); ++i) {
+                for (int idx : component_graphs[i].global_indices) {
+                    point_to_component_id[idx] = component_graphs[i].component_id;
+                }
+            }
+
+            component_graph_vertices(component_graphs, comp_V, comp_C_vertices);
+
+            // print radius
+            std::cout << "Component radius: " << component_radius << std::endl;
+
+            // print number of components
+            std::cout << "Number of components: " << component_graphs.size() << std::endl;
+
+            component_graph_edges(component_graphs, P1, P2, comp_C_edges);
+
+                if (show_components) {
+
+                        viewer.data_list[index_components].add_points(comp_V, comp_C_vertices);
+
+                        viewer.data_list[index_components].point_size = 5;
+                        viewer.data_list[index_skeleton].clear();
+
+                    } else {
+                        viewer.data_list[index_components].clear();
+                        viewer.data_list[index_skeleton].set_points(V, default_C);
+                    }
+            
+
+                if (show_components_mst) {
+
+                    for (int i = 0; i < P1.rows(); ++i) {
+                        viewer.data_list[index_components_mst].add_edges(P1.row(i), P2.row(i), comp_C_edges.row(i));
+                    }
+
+                    viewer.data_list[index_skeleton].clear();
+
+                } else {
+                    viewer.data_list[index_components_mst].clear();
+                    viewer.data_list[index_skeleton].set_points(V, default_C);
+                }
+update_components = false;
         }
 
 

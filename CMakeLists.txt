@@ -66,6 +66,8 @@ set(SRC_FILES
 
     src/partition/propagate_weighted_tree.cpp
     src/partition/seperate_into_components.cpp
+
+    src/utils/color_utils.h
 )
 
 # Add the executable
