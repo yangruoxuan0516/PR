@@ -90,20 +90,56 @@ std::vector<ComponentGraph> get_component_graphs(
 }
 
 
+void mark_selected_components(
+    std::vector<ComponentGraph>& component_graphs,
+    const Eigen::MatrixXd& V,
+    const Eigen::MatrixXd& C,
+    const std::vector<Eigen::RowVector3d>& type_colors,
+    const std::vector<int>& point_to_component_id)
+{
+    // 先全部设为 false
+    for (auto& cg : component_graphs) {
+        cg.selected = false;
+    }
+
+    std::set<int> selected_ids;
+
+    for (int i = 0; i < V.rows(); ++i) {
+        for (int j = 0; j < type_colors.size(); ++j) {
+            if (C.row(i) == type_colors[j]) {
+                int cid = point_to_component_id[i];
+                selected_ids.insert(cid);
+                break;
+            }
+        }
+    }
+
+    for (auto& cg : component_graphs) {
+        if (selected_ids.count(cg.component_id)) {
+            cg.selected = true;
+        }
+    }
+}
+
+
+
 void component_graph_vertices(
     const std::vector<ComponentGraph>& component_graphs,
     Eigen::MatrixXd& V_out,
-    Eigen::MatrixXd& C_out
+    Eigen::MatrixXd& C_out,
+    bool show_selected_components_only
 ) {
     int total = 0;
-    for (const auto& cg : component_graphs)
+    for (const auto& cg : component_graphs){
+        if (show_selected_components_only && !cg.selected) continue;
         total += cg.global_indices.size();
-
+    }
     V_out.resize(total, 3);
     C_out.resize(total, 3);
 
     int cursor = 0;
     for (const auto& cg : component_graphs) {
+        if (show_selected_components_only && !cg.selected) continue;
         for (int i = 0; i < cg.global_indices.size(); ++i) {
             V_out.row(cursor) = cg.V_sub.row(i);
             C_out.row(cursor) = cg.color;
@@ -117,11 +153,15 @@ void component_graph_edges(
     const std::vector<ComponentGraph>& component_graphs,
     Eigen::MatrixXd& P1_out,
     Eigen::MatrixXd& P2_out,
-    Eigen::MatrixXd& C_out
+    Eigen::MatrixXd& C_out,
+    bool show_selected_components_only
 ) {
     int total_edges = 0;
-    for (const auto& cg : component_graphs)
+    for (const auto& cg : component_graphs){
+        if (show_selected_components_only && !cg.selected) continue;
         total_edges += cg.E_mst.rows();
+    }
+        
 
     P1_out.resize(total_edges, 3);
     P2_out.resize(total_edges, 3);
@@ -129,6 +169,7 @@ void component_graph_edges(
 
     int cursor = 0;
     for (const auto& cg : component_graphs) {
+        if (show_selected_components_only && !cg.selected) continue;
         for (int i = 0; i < cg.E_mst.rows(); ++i) {
             int u = cg.E_mst(i, 0);
             int v = cg.E_mst(i, 1);
@@ -140,3 +181,5 @@ void component_graph_edges(
         }
     }
 }
+
+

@@ -89,7 +89,8 @@ bool click_point(igl::opengl::glfw::Viewer& viewer,
     std::vector<Eigen::RowVector3d> type_colors,
     Eigen::RowVector3d default_color,
     int& index_selected_points,
-    std::vector<int> point_to_component_id)
+    std::vector<int> point_to_component_id,
+    bool& click_on_a_point)
 {
     int vid = -1;
     double min_dis = 20;  // pixel threshold
@@ -110,10 +111,9 @@ bool click_point(igl::opengl::glfw::Viewer& viewer,
     }
 
     if (vid != -1) {
+        click_on_a_point = true;  // Set the flag to true when a point is clicked
         if (C.row(vid) == default_color) {
             C.row(vid) = selected_color;
-            // print the component id
-            std::cout << "Component ID: " << point_to_component_id[vid] << std::endl;
 
 // --- this part is just for testing ---
             // Delaunay dt;
@@ -239,6 +239,26 @@ std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> connect_points_with_snake(GUIParams
 }
 
 
+
+std::set<int> get_selected_component_ids(const Eigen::MatrixXd& V, const Eigen::MatrixXd& C, const std::vector<Eigen::RowVector3d>& type_colors, const std::vector<int>& point_to_component_id)
+{
+    std::set<int> selected_ids;
+    for (int i = 0; i < V.rows(); ++i)
+    {
+        for (const auto& color : type_colors)
+        {
+            if (C.row(i) == color)
+            {
+                selected_ids.insert(point_to_component_id[i]);
+                break;
+            }
+        }
+    }
+    return selected_ids;
+}
+
+
+
 int main() {
 // --- load the point cloud
     Eigen::MatrixXd V, V_ori;
@@ -273,6 +293,21 @@ int main() {
     }
 
     Eigen::MatrixXi E;
+
+// --- params
+    bool show_point_cloud = true;
+    bool show_skeleton = true;
+    bool show_delaunay = false;
+    bool show_delaunay_selected = false;
+    bool show_mst = false;
+    bool show_mst_selected = false;
+    bool show_root = false;
+    bool show_hierarchy = false;
+    bool show_partition = false;
+    bool show_components = false;
+    bool show_components_mst = false;
+    bool show_selected_components_only = false;
+    bool click_on_a_point = false;
 
 // --- colors
     std::vector<std::string> type_labels = {"Type 1"};
@@ -324,10 +359,10 @@ int main() {
     auto component_graphs = get_component_graphs(V, component_radius);
 
     Eigen::MatrixXd comp_V, comp_C_vertices;
-    component_graph_vertices(component_graphs, comp_V, comp_C_vertices);
+    component_graph_vertices(component_graphs, comp_V, comp_C_vertices, show_selected_components_only);
 
     Eigen::MatrixXd P1, P2, comp_C_edges;
-    component_graph_edges(component_graphs, P1, P2, comp_C_edges);
+    component_graph_edges(component_graphs, P1, P2, comp_C_edges, show_selected_components_only);
 
     std::vector<int> point_to_component_id(V.rows(), -1);
     for (int i = 0; i < component_graphs.size(); ++i) {
@@ -369,7 +404,7 @@ int main() {
     viewer.core().camera_up = Eigen::Vector3f(0, 0, 1); 
 
     viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer& viewer, int button, int modifier) {
-        return click_point(viewer, V, C, button, modifier, type_colors[current_type_index], type_colors, default_color, index_selected_points, point_to_component_id);
+        return click_point(viewer, V, C, button, modifier, type_colors[current_type_index], type_colors, default_color, index_selected_points, point_to_component_id, click_on_a_point);
     };
 
 
@@ -381,15 +416,7 @@ int main() {
 
     GUIParams params; 
     
-    bool show_delaunay = false;
-    bool show_delaunay_selected = false;
-    bool show_mst = false;
-    bool show_mst_selected = false;
-    bool show_root = false;
-    bool show_hierarchy = false;
-    bool show_partition = false;
-    bool show_components = false;
-    bool show_components_mst = false;
+
 
     menu.callback_draw_viewer_menu = [&]()
     {
@@ -400,6 +427,24 @@ int main() {
         ImGui::Text("Demostration Settings:");
         ImGui::SliderFloat("Skeleton point radius", &viewer.data_list[index_skeleton].point_size, 0.001f, 5.0f);
         ImGui::SliderFloat("Point cloud point radius", &viewer.data_list[index_point_cloud].point_size, 0.001f, 5.0f);
+        // show the point cloud
+        if (ImGui::Button("Show Point Cloud", ImVec2(-1, 0))) {
+            show_point_cloud = !show_point_cloud;
+            if (show_point_cloud) {
+                viewer.data_list[index_point_cloud].set_points(V_ori, C_ori);
+            } else {
+                viewer.data_list[index_point_cloud].clear();
+            }
+        }
+        // show the skeleton
+        if (ImGui::Button("Show Skeleton", ImVec2(-1, 0))) {
+            show_skeleton = !show_skeleton;
+            if (show_skeleton) {
+                viewer.data_list[index_skeleton].set_points(V, default_C);
+            } else {
+                viewer.data_list[index_skeleton].clear();
+            }
+        }
 
 
         ImGui::Separator();
@@ -421,11 +466,23 @@ int main() {
         }
 
         if (ImGui::Button("Reset", ImVec2(-1, 0))) {
-            for (int i = 0; i < viewer.data_list.size(); ++i) {
-                viewer.data_list[i].clear();
-            }
-            viewer.data_list[index_point_cloud].set_points(V_ori, C_ori);
-            viewer.data_list[index_skeleton].set_points(V, default_C);
+            // for (int i = 0; i < viewer.data_list.size(); ++i) {
+            //     viewer.data_list[i].clear();
+            // }
+            // viewer.data_list[index_point_cloud].set_points(V_ori, C_ori);
+            // viewer.data_list[index_skeleton].set_points(V, default_C);
+            show_point_cloud = true;
+            show_skeleton = true;
+            show_delaunay = false;
+            show_delaunay_selected = false;
+            show_mst = false;
+            show_mst_selected = false;
+            show_root = false;
+            show_hierarchy = false;
+            show_partition = false;
+            show_components = false;
+            show_components_mst = false;
+            show_selected_components_only = false;
             for (int i = 0; i < V.rows(); ++i) {
                 C.row(i) = default_color;
             }
@@ -685,10 +742,10 @@ int main() {
             if (show_hierarchy) {
                 viewer.data_list[index_hierarchy].point_size = 5;
                 viewer.data_list[index_hierarchy].set_points(V, C_hierarchy); 
-                viewer.data_list[index_skeleton].clear();
+                // viewer.data_list[index_skeleton].clear();
             } else {
                 viewer.data_list[index_hierarchy].clear(); // clear edges to hide
-                viewer.data_list[index_skeleton].set_points(V, default_C);
+                // viewer.data_list[index_skeleton].set_points(V, default_C);
             }
         }
 
@@ -724,10 +781,10 @@ int main() {
                 viewer.data_list[index_pointwise_partition].set_points(V, C_partition_p);
                 viewer.data_list[index_pointwise_partition].point_size = 7;
                 viewer.data_list[index_pointwise_partition].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
-                viewer.data_list[index_skeleton].clear();
+                // viewer.data_list[index_skeleton].clear();
             } else {
                 viewer.data_list[index_pointwise_partition].clear();
-                viewer.data_list[index_skeleton].set_points(V, default_C);
+                // viewer.data_list[index_skeleton].set_points(V, default_C);
             }
         }
 
@@ -765,10 +822,10 @@ int main() {
                 // viewer.data_list[index_pointwise_partition].set_points(V, C_debug);
                 viewer.data_list[index_segmentwise_partition].point_size = 7;
                 viewer.data_list[index_segmentwise_partition].dirty |= igl::opengl::MeshGL::DIRTY_ALL;
-                viewer.data_list[index_skeleton].clear();
+                // viewer.data_list[index_skeleton].clear();
             } else {
                 viewer.data_list[index_segmentwise_partition].clear();
-                viewer.data_list[index_skeleton].set_points(V, default_C);
+                // viewer.data_list[index_skeleton].set_points(V, default_C);
             }
         }
 
@@ -786,6 +843,13 @@ int main() {
             last_component_radius = component_radius;
         }
 
+        
+        static bool prev_show_selected_components_only = false;
+        ImGui::Checkbox("Show the chosen components only", &show_selected_components_only);
+        bool show_comp_change = (show_selected_components_only != prev_show_selected_components_only);
+        prev_show_selected_components_only = show_selected_components_only;
+        // [TODO] add a button to toggle the show_UNselected_components_only
+
 
         if (ImGui::Button("Show Connected Components", ImVec2(-1, 0))) {
             show_components = !show_components;
@@ -795,11 +859,11 @@ int main() {
                         viewer.data_list[index_components].add_points(comp_V, comp_C_vertices);
 
                         viewer.data_list[index_components].point_size = 5;
-                        viewer.data_list[index_skeleton].clear();
+                        // viewer.data_list[index_skeleton].clear();
 
                     } else {
                         viewer.data_list[index_components].clear();
-                        viewer.data_list[index_skeleton].set_points(V, default_C);
+                        // viewer.data_list[index_skeleton].set_points(V, default_C);
                     }
             }
 
@@ -812,15 +876,16 @@ int main() {
                     viewer.data_list[index_components_mst].add_edges(P1.row(i), P2.row(i), comp_C_edges.row(i));
                 }
 
-                viewer.data_list[index_skeleton].clear();
+                // viewer.data_list[index_skeleton].clear();
 
             } else {
                 viewer.data_list[index_components_mst].clear();
-                viewer.data_list[index_skeleton].set_points(V, default_C);
+                // viewer.data_list[index_skeleton].set_points(V, default_C);
             }
         }
 
-        if (update_components) {
+        if (show_comp_change || update_components || click_on_a_point) {
+
             viewer.data_list[index_components].clear();
             viewer.data_list[index_components_mst].clear();
 
@@ -832,26 +897,21 @@ int main() {
                 }
             }
 
-            component_graph_vertices(component_graphs, comp_V, comp_C_vertices);
+            mark_selected_components(component_graphs, V, C, type_colors, point_to_component_id);
 
-            // print radius
-            std::cout << "Component radius: " << component_radius << std::endl;
+            component_graph_vertices(component_graphs, comp_V, comp_C_vertices, show_selected_components_only);
 
-            // print number of components
-            std::cout << "Number of components: " << component_graphs.size() << std::endl;
-
-            component_graph_edges(component_graphs, P1, P2, comp_C_edges);
+            component_graph_edges(component_graphs, P1, P2, comp_C_edges, show_selected_components_only);
 
                 if (show_components) {
 
                         viewer.data_list[index_components].add_points(comp_V, comp_C_vertices);
 
-                        viewer.data_list[index_components].point_size = 5;
-                        viewer.data_list[index_skeleton].clear();
+                        // viewer.data_list[index_skeleton].clear();
 
                     } else {
                         viewer.data_list[index_components].clear();
-                        viewer.data_list[index_skeleton].set_points(V, default_C);
+                        // viewer.data_list[index_skeleton].set_points(V, default_C);
                     }
             
 
@@ -861,13 +921,14 @@ int main() {
                         viewer.data_list[index_components_mst].add_edges(P1.row(i), P2.row(i), comp_C_edges.row(i));
                     }
 
-                    viewer.data_list[index_skeleton].clear();
+                    // viewer.data_list[index_skeleton].clear();
 
                 } else {
                     viewer.data_list[index_components_mst].clear();
-                    viewer.data_list[index_skeleton].set_points(V, default_C);
+                    // viewer.data_list[index_skeleton].set_points(V, default_C);
                 }
-update_components = false;
+            update_components = false;
+            click_on_a_point = false; 
         }
 
 
