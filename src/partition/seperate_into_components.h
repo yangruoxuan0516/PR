@@ -20,9 +20,7 @@ struct ComponentGraph {
 
 void mark_selected_components(
     std::vector<ComponentGraph>& component_graphs,
-    const Eigen::MatrixXd& V,
-    const Eigen::MatrixXd& C,
-    const std::vector<Eigen::RowVector3d>& type_colors,
+    const std::vector<std::pair<int, int>>& selected_points_and_corresponding_types,
     const std::vector<int>& point_to_component_id);
 
 std::vector<std::vector<int>> seperate_into_components(const Eigen::MatrixXd& V, double radius);

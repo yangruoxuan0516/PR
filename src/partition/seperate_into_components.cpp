@@ -92,26 +92,19 @@ std::vector<ComponentGraph> get_component_graphs(
 
 void mark_selected_components(
     std::vector<ComponentGraph>& component_graphs,
-    const Eigen::MatrixXd& V,
-    const Eigen::MatrixXd& C,
-    const std::vector<Eigen::RowVector3d>& type_colors,
+    const std::vector<std::pair<int, int>>& selected_points_and_corresponding_types,
     const std::vector<int>& point_to_component_id)
 {
-    // 先全部设为 false
+    // Reset all
     for (auto& cg : component_graphs) {
         cg.selected = false;
     }
 
     std::set<int> selected_ids;
-
-    for (int i = 0; i < V.rows(); ++i) {
-        for (int j = 0; j < type_colors.size(); ++j) {
-            if (C.row(i) == type_colors[j]) {
-                int cid = point_to_component_id[i];
-                selected_ids.insert(cid);
-                break;
-            }
-        }
+    for (const auto& pair : selected_points_and_corresponding_types) {
+        int point_idx = pair.first;
+        int cid = point_to_component_id[point_idx];
+        selected_ids.insert(cid);
     }
 
     for (auto& cg : component_graphs) {
@@ -120,6 +113,7 @@ void mark_selected_components(
         }
     }
 }
+
 
 
 

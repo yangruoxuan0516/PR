@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <limits> // for quiet_NaN()
+#include <vector>
 
 #include "connect_points/travel_salesman.h"
 #include "connect_points/snake.h"
@@ -53,25 +54,23 @@ bool loadXYZ(const std::string& filename, Eigen::MatrixXd& V) {
     return true;
 }
 
+
 void update_selected_layer(
     igl::opengl::glfw::Viewer& viewer,
     const Eigen::MatrixXd& V,
-    const Eigen::MatrixXd& C,
-    Eigen::RowVector3d default_color,
+    const std::vector<std::pair<int, int>>& selected_points_and_corresponding_types,
+    const std::vector<Eigen::RowVector3d>& type_colors,
     int data_id)
 {
-    std::vector<int> selected_indices;
-    for (int i = 0; i < C.rows(); ++i) {
-        if (C.row(i) != default_color) {
-            selected_indices.push_back(i);
-        }
-    }
+    const int num = selected_points_and_corresponding_types.size();
+    Eigen::MatrixXd V_sel(num, 3);
+    Eigen::MatrixXd C_sel(num, 3);
 
-    Eigen::MatrixXd V_sel(selected_indices.size(), 3);
-    Eigen::MatrixXd C_sel(selected_indices.size(), 3);
-    for (int i = 0; i < selected_indices.size(); ++i) {
-        V_sel.row(i) = V.row(selected_indices[i]);
-        C_sel.row(i) = C.row(selected_indices[i]);
+    for (int i = 0; i < num; ++i) {
+        int idx = selected_points_and_corresponding_types[i].first;
+        int type = selected_points_and_corresponding_types[i].second;
+        V_sel.row(i) = V.row(idx);
+        C_sel.row(i) = type_colors[type];
     }
 
     viewer.data_list[data_id].clear();
@@ -80,29 +79,29 @@ void update_selected_layer(
 }
 
 
-bool click_point(igl::opengl::glfw::Viewer& viewer,
-    Eigen::MatrixXd& V,
+bool click_point(
+    igl::opengl::glfw::Viewer& viewer,
+    const Eigen::MatrixXd& V,
     Eigen::MatrixXd& C,
     int button,
     int modifier,
-    const Eigen::RowVector3d& selected_color,
-    std::vector<Eigen::RowVector3d> type_colors,
-    Eigen::RowVector3d default_color,
+    const Eigen::RowVector3d& default_color,
+    const std::vector<Eigen::RowVector3d>& type_colors,
+    int current_type_index,
     int& index_selected_points,
-    std::vector<int> point_to_component_id,
-    bool& click_on_a_point)
+    std::vector<std::pair<int, int>>& selected_points_and_corresponding_types,
+    bool& click_on_a_point,
+    int& clicked_point_id)
 {
     int vid = -1;
-    double min_dis = 20;  // pixel threshold
+    double min_dis = 20;
     double x = viewer.current_mouse_x;
     double y = viewer.core().viewport(3) - viewer.current_mouse_y - 1;
-
     Eigen::Vector3f click_pos(x, y, 0);
 
     for (int i = 0; i < V.rows(); i++) {
         Eigen::Vector3f projected;
         igl::project(V.row(i).cast<float>(), viewer.core().view, viewer.core().proj, viewer.core().viewport, projected);
-
         double dist = (projected.head<2>() - click_pos.head<2>()).norm();
         if (dist < min_dis) {
             min_dis = dist;
@@ -111,68 +110,36 @@ bool click_point(igl::opengl::glfw::Viewer& viewer,
     }
 
     if (vid != -1) {
-        click_on_a_point = true;  // Set the flag to true when a point is clicked
-        if (C.row(vid) == default_color) {
-            C.row(vid) = selected_color;
+        clicked_point_id = vid;
+        click_on_a_point = true;
 
-// --- this part is just for testing ---
-            // Delaunay dt;
-            // insert_points_into_delaunay(V, dt);
-            // Eigen::MatrixXi E_dt;
-            // extract_edges_from_delaunay(dt, V, E_dt);
-            // Eigen::MatrixXi E_mst = extract_mst_from_delaunay(V, E_dt);
-            // // color also the ancestors
-            // int root = find_root(V, E_mst);
-            // std::vector<std::vector<int>> ancestor_list = find_ancestor_list(V, E_mst, root);
-    // -- here is the test for the ancestor list
-            // std::vector<int> ancestors = ancestor_list[vid];
-            // // print the ancestors
-            // std::cout << "Anscestors of point " << vid << ": ";
-            // for (int i = 0; i < ancestors.size(); i++) {
-            //     std::cout << ancestors[i] << " ";
-            // }
-            // std::cout << std::endl;
-            // for (int i = 0; i < ancestors.size(); i++) {
-            //     C.row(ancestors[i]) = selected_color;
-            // }
-    // -- here is the test for the subtree
-            // std::vector<int> current_subtree = find_subtree(V, E_mst, ancestor_list, vid);
-            // // print the subtree
-            // std::cout << "Subtree of point " << vid << ": ";
-            // for (int i = 0; i < current_subtree.size(); i++) {
-            //     std::cout << current_subtree[i] << " ";
-            // }
-            // std::cout << std::endl;
-            // // color the subtree
-            // for (int i = 0; i < current_subtree.size(); i++) {
-            //     C.row(current_subtree[i]) = selected_color;
-            // }
-    // -- here is to test going up
-            // std::vector<int> new_subtree = going_up(V, E_mst, ancestor_list, current_subtree);
-            // // print the new subtree
-            // std::cout << "New subtree of point " << vid << ": ";
-            // for (int i = 0; i < new_subtree.size(); i++) {
-            //     std::cout << new_subtree[i] << " ";
-            // }
-            // std::cout << std::endl;
-            // // color the new subtree
-            // for (int i = 0; i < new_subtree.size(); i++) {
-            //     C.row(new_subtree[i]) = selected_color;
-            // }
-    // -- here is for testing the splitting based on the hierarchy, but it is not working
-            // Eigen::MatrixXd new_colors = seperate_based_on_hierarchy(V, E_mst, C, type_colors, ancestor_list);
-            // // print the new color length
-            // std::cout << "New color length: " << new_colors.rows() << std::endl;
-            // // print point cloud length
-            // std::cout << "Point cloud length: " << V.rows() << std::endl;
-            // viewer.data_list[index_pointwise_partition].set_points(V, new_colors);
-// --- end of the testing code ---
+        // 查找是否已存在这个点（与当前类型）
+        auto it = std::find_if(selected_points_and_corresponding_types.begin(), selected_points_and_corresponding_types.end(),
+            [&](const std::pair<int, int>& p) {
+                return p.first == vid && p.second == current_type_index;
+            });
 
-        } 
-        else {
-            C.row(vid) = default_color;
+        if (it != selected_points_and_corresponding_types.end()) {
+            // 若存在，移除
+            selected_points_and_corresponding_types.erase(it);
+        } else {
+            // 若不存在，加入
+            selected_points_and_corresponding_types.emplace_back(vid, current_type_index);
         }
-        update_selected_layer(viewer, V, C, default_color, index_selected_points);
+
+        // 重建颜色矩阵
+        C = Eigen::MatrixXd::Zero(C.rows(), C.cols());  
+        C.rowwise() = default_color;
+        for (const auto& p : selected_points_and_corresponding_types) {
+            int index = p.first;
+            int type_index = p.second;
+            C.row(index) = type_colors[type_index];
+        }
+
+        // 更新显示
+        // update_selected_layer(viewer, V, C, default_color, index_selected_points);
+        update_selected_layer(viewer, V, selected_points_and_corresponding_types, type_colors, index_selected_points);
+
         return true;
     }
 
@@ -181,26 +148,27 @@ bool click_point(igl::opengl::glfw::Viewer& viewer,
 
 
 
-Eigen::MatrixXd get_colored_points(const Eigen::MatrixXd& V, const Eigen::MatrixXd& C, const Eigen::RowVector3d& color) {
-    std::vector<int> selected_points;
 
-    for (int i = 0; i < V.rows(); i++) {
-        if (C.row(i) == color) {
-            selected_points.push_back(i);
+Eigen::MatrixXd get_colored_points_by_type(
+    const Eigen::MatrixXd& V,
+    const std::vector<std::pair<int, int>>& selected_points_and_corresponding_types,
+    int type_index)
+{
+    std::vector<int> indices;
+    for (const auto& p : selected_points_and_corresponding_types) {
+        if (p.second == type_index) {
+            indices.push_back(p.first);
         }
     }
 
-    // if (selected_points.size() < 2) {
-    //     return Eigen::MatrixXd();
-    // }
-
-    Eigen::MatrixXd points(selected_points.size(), 3);
-
-    for (int i = 0; i < selected_points.size(); i++) {
-        points.row(i) = V.row(selected_points[i]);
+    Eigen::MatrixXd result(indices.size(), 3);
+    for (int i = 0; i < indices.size(); ++i) {
+        result.row(i) = V.row(indices[i]);
     }
-    return points;
+
+    return result;
 }
+
 
 
 std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> connect_points_with_snake(GUIParams& params, const Eigen::MatrixXd& V, Eigen::MatrixXd points, const Eigen::RowVector3d& color, igl::opengl::glfw::Viewer& viewer) {
@@ -236,25 +204,6 @@ std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> connect_points_with_snake(GUIParams
 
     return std::make_tuple(V_final,E_final);
 
-}
-
-
-
-std::set<int> get_selected_component_ids(const Eigen::MatrixXd& V, const Eigen::MatrixXd& C, const std::vector<Eigen::RowVector3d>& type_colors, const std::vector<int>& point_to_component_id)
-{
-    std::set<int> selected_ids;
-    for (int i = 0; i < V.rows(); ++i)
-    {
-        for (const auto& color : type_colors)
-        {
-            if (C.row(i) == color)
-            {
-                selected_ids.insert(point_to_component_id[i]);
-                break;
-            }
-        }
-    }
-    return selected_ids;
 }
 
 
@@ -403,9 +352,22 @@ int main() {
     viewer.core().camera_eye = Eigen::Vector3f(0, 5, 0); // Set camera position
     viewer.core().camera_up = Eigen::Vector3f(0, 0, 1); 
 
+    std::vector<std::pair<int, int>> selected_points_and_corresponding_types; 
+
     viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer& viewer, int button, int modifier) {
-        return click_point(viewer, V, C, button, modifier, type_colors[current_type_index], type_colors, default_color, index_selected_points, point_to_component_id, click_on_a_point);
+        int clicked_point_id = -1;
+        return click_point(
+            viewer, V, C,
+            button, modifier,
+            default_color, type_colors,
+            current_type_index,
+            index_selected_points,
+            selected_points_and_corresponding_types,
+            click_on_a_point,
+            clicked_point_id
+        );
     };
+
 
 
 // --- menu
@@ -466,11 +428,11 @@ int main() {
         }
 
         if (ImGui::Button("Reset", ImVec2(-1, 0))) {
-            // for (int i = 0; i < viewer.data_list.size(); ++i) {
-            //     viewer.data_list[i].clear();
-            // }
-            // viewer.data_list[index_point_cloud].set_points(V_ori, C_ori);
-            // viewer.data_list[index_skeleton].set_points(V, default_C);
+            for (int i = 0; i < viewer.data_list.size(); ++i) {
+                viewer.data_list[i].clear();
+            }
+            viewer.data_list[index_point_cloud].set_points(V_ori, C_ori);
+            viewer.data_list[index_skeleton].set_points(V, default_C);
             show_point_cloud = true;
             show_skeleton = true;
             show_delaunay = false;
@@ -483,12 +445,13 @@ int main() {
             show_components = false;
             show_components_mst = false;
             show_selected_components_only = false;
-            for (int i = 0; i < V.rows(); ++i) {
-                C.row(i) = default_color;
-            }
+            click_on_a_point = false;
+            selected_points_and_corresponding_types.clear();
+            // update_selected_layer(viewer, V, C, default_color, index_selected_points);
             type_labels = {"Type 1"};
             current_type_index = 0;
             type_colors = { generate_distinct_color(current_type_index - 1) };
+            update_selected_layer(viewer, V, selected_points_and_corresponding_types, type_colors, index_selected_points);
         }
 
 /*
@@ -514,7 +477,8 @@ int main() {
 
             for (int i = 0; i < type_labels.size(); i++) {
                 Eigen::MatrixXd V_temp = V;
-                Eigen::MatrixXd colored_points = get_colored_points(V_temp, C, type_colors[i]);
+                Eigen::MatrixXd colored_points = get_colored_points_by_type(V, selected_points_and_corresponding_types, i);
+
                 if (colored_points.rows() < 2) {
                     continue;
                 }
@@ -613,7 +577,8 @@ int main() {
         
             for (int i = 0; i < type_labels.size(); i++) {
                 Eigen::MatrixXd V_temp = V;
-                Eigen::MatrixXd colored_points = get_colored_points(V_temp, C, type_colors[i]);
+                Eigen::MatrixXd colored_points = get_colored_points_by_type(V, selected_points_and_corresponding_types, i);
+
         
                 if (colored_points.rows() < 2) continue;
         
@@ -681,7 +646,8 @@ int main() {
         
             for (int i = 0; i < type_labels.size(); i++) {
                 Eigen::MatrixXd V_temp = V;
-                Eigen::MatrixXd colored_points = get_colored_points(V_temp, C, type_colors[i]);
+                Eigen::MatrixXd colored_points = get_colored_points_by_type(V, selected_points_and_corresponding_types, i);
+
         
                 if (colored_points.rows() < 2) continue;
         
@@ -758,7 +724,8 @@ int main() {
                 // 构建 labeled_points: map from point index to class index
                 std::unordered_map<int, int> labeled_points;
                 for (int class_id = 0; class_id < type_colors.size(); ++class_id) {
-                    Eigen::MatrixXd points = get_colored_points(V, C, type_colors[class_id]);
+                    Eigen::MatrixXd points = get_colored_points_by_type(V, selected_points_and_corresponding_types, class_id);
+
                     for (int i = 0; i < points.rows(); ++i) {
                         int index = find_closest_point(V, points.row(i));
                         labeled_points[index] = class_id;
@@ -798,7 +765,8 @@ int main() {
                 // 构建 labeled_points: map from point index to class index
                 std::unordered_map<int, int> labeled_points;
                 for (int class_id = 0; class_id < type_colors.size(); ++class_id) {
-                    Eigen::MatrixXd points = get_colored_points(V, C, type_colors[class_id]);
+                    Eigen::MatrixXd points = get_colored_points_by_type(V, selected_points_and_corresponding_types, class_id);
+
                     for (int i = 0; i < points.rows(); ++i) {
                         int index = find_closest_point(V, points.row(i));
                         labeled_points[index] = class_id;
@@ -897,7 +865,7 @@ int main() {
                 }
             }
 
-            mark_selected_components(component_graphs, V, C, type_colors, point_to_component_id);
+            mark_selected_components(component_graphs, selected_points_and_corresponding_types, point_to_component_id);
 
             component_graph_vertices(component_graphs, comp_V, comp_C_vertices, show_selected_components_only);
 
